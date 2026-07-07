@@ -167,17 +167,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _applyState(VpnState state) {
     if (!mounted) return;
-    var effective = state;
-    if (state == VpnState.connected && _linkState != 0) {
-      effective = VpnState.connecting;
-    }
     setState(() {
-      _state = effective;
-      if (effective == VpnState.connected) {
+      _state = state;
+      if (state == VpnState.connected) {
         _connectedAt ??= DateTime.now();
         _connectWatchdogTimer?.cancel();
         _startDurationTimer();
-      } else if (effective == VpnState.disconnected) {
+      } else if (state == VpnState.disconnected) {
         _connectedAt = null;
         _connectWatchdogTimer?.cancel();
         _durationTimer?.cancel();
@@ -257,7 +253,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         timer.cancel();
         return;
       }
-      // Prefer native link state ESTABLISHED (0) over onStarted log markers.
+      if (_vpnService.currentState == VpnState.connected) {
+        timer.cancel();
+        if (!mounted) return;
+        _applyState(VpnState.connected);
+        return;
+      }
+      // onStarted / VPN started means the native engine is live even when
+      // linkState polling still reports CONNECTING.
+      final log = await _vpnService.readLog();
+      if (log.contains('onStarted key=') || log.contains('VPN started with key=')) {
+        timer.cancel();
+        if (!mounted) return;
+        _applyState(VpnState.connected);
+        return;
+      }
       if (_linkState == 0) {
         timer.cancel();
         if (!mounted) return;
@@ -269,14 +279,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       final totalSec = DateTime.now().difference(startedAt).inSeconds;
       if (!hbStale && totalSec < _connectMaxSeconds) return;
       timer.cancel();
-      final log = await _vpnService.readLog();
-      final hasRunCalled = log.contains('vpnThread started');
       final reason = totalSec >= _connectMaxSeconds
           ? '超过 ${_connectMaxSeconds}s 上限'
           : ':vpn 心跳已停 ${(hbAgeMs / 1000).toStringAsFixed(1)}s';
       final error = log.trim().isEmpty
           ? '连接超时（$reason）：VPN Service 没有返回状态，也没有生成日志。'
-          : hasRunCalled
+          : log.contains('vpnThread started')
               ? '连接超时（$reason）：native 引擎已启动但未完成握手。\n请检查所选配置的服务器地址、密钥与网络连通性。'
               : '连接超时（$reason）：VPN 未进入已连接状态。';
       if (!mounted || _state != VpnState.connecting) return;

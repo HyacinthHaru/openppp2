@@ -570,6 +570,7 @@ class PppVpnService : VpnService() {
         Log.i(TAG, "perf connect_established_ms=$connectElapsedMs")
         PppLog.write(this, "onStarted key=$key")
         PppLog.write(this, "VPN started with key=$key")
+        publishLinkState(0, forceEvent = true)
         notifyStateChanged(2) // connected
         updateNotification("已连接")
     }
