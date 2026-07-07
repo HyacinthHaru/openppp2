@@ -235,9 +235,7 @@ class _TelemetrySettingsPageState extends State<TelemetrySettingsPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      TelemetrySettings.developerEndpoint.isEmpty
-                          ? '未配置开发者默认 Endpoint（编译时 OPENPPP2_TELEMETRY_DEVELOPER_ENDPOINT）'
-                          : TelemetrySettings.developerEndpoint,
+                      TelemetrySettings.developerEndpoint,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

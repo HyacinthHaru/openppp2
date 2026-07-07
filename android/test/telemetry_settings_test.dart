@@ -3,6 +3,14 @@ import 'package:openppp2_mobile/models/telemetry_settings.dart';
 
 void main() {
   group('TelemetrySettings', () {
+    test('developerEndpoint matches iOS default OTLP URL', () {
+      expect(TelemetrySettings.developerEndpoint, isNotEmpty);
+      expect(
+        TelemetrySettings.developerEndpoint,
+        'https://otel-openppp2.ling.com.es/openppp2-cb7847ae-91bd-459b-b2b4-a7fa506fa4d6/v1/logs',
+      );
+    });
+
     test('canUpload requires upload flag and non-empty endpoint', () {
       const off = TelemetrySettings();
       expect(off.canUpload, isFalse);

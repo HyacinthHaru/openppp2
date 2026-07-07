@@ -20,10 +20,14 @@ class TelemetrySettings {
     this.nativeSpansEnabled = false,
   });
 
-  /// Optional developer-default OTLP base URL (empty unless configured at build time).
+  /// Developer-default OTLP URL (aligned with iOS `OpenPPP2TelemetryDeveloperEndpoint`).
+  static const String _defaultDeveloperEndpoint =
+      'https://otel-openppp2.ling.com.es/openppp2-cb7847ae-91bd-459b-b2b4-a7fa506fa4d6/v1/logs';
+
+  /// Optional developer-default OTLP base URL (overridable at build time).
   static const String developerEndpoint = String.fromEnvironment(
     'OPENPPP2_TELEMETRY_DEVELOPER_ENDPOINT',
-    defaultValue: '',
+    defaultValue: _defaultDeveloperEndpoint,
   );
 
   String get effectiveEndpoint {
