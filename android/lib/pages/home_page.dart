@@ -402,13 +402,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Future<void> _updateLaunchOption(
-    Map<String, dynamic> Function(Map<String, dynamic>) mutate,
+    void Function(Map<String, dynamic> options) mutate,
   ) async {
     final active = _active;
     if (active == null) return;
-    final next = mutate(Map<String, dynamic>.from(_launchOptions));
-    if (mapEquals(next, _launchOptions)) return;
-    await _store.setProfileOptions(active.id, next);
+    await _store.updateProfileOptions(active.id, mutate);
+    if (!mounted) return;
+    final next = await _store.getProfileOptions(active.id);
     if (!mounted) return;
     setState(() => _launchOptions = next);
     if (_state == VpnState.connected || _state == VpnState.connecting) {
@@ -511,19 +511,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ? null
                   : (v) => _updateLaunchOption((o) {
                         o['allowLan'] = v;
-                        return o;
                       }),
               onBlockQuicChanged: _active == null
                   ? null
                   : (v) => _updateLaunchOption((o) {
                         o['blockQuic'] = v;
-                        return o;
                       }),
               onRouteModeChanged: _active == null
                   ? null
-                  : (mode) => _updateLaunchOption(
-                        (o) => LaunchRouteMode.applyTo(o, mode),
-                      ),
+                  : (mode) => _updateLaunchOption((o) {
+                        final next = LaunchRouteMode.applyTo(o, mode);
+                        o
+                          ..clear()
+                          ..addAll(next);
+                      }),
             ),
             const SizedBox(height: 16),
             Row(

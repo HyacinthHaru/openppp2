@@ -39,6 +39,7 @@ class _OptionsPageState extends State<OptionsPage> {
   final _socksProxyPort = TextEditingController(text: '1080');
 
   bool _allowLan = false;
+  bool _blockQuic = false;
   bool _dnsInterceptUnmatched = true;
   bool _dnsEcsEnabled = true;
   bool _dnsTlsVerifyPeer = true;
@@ -57,9 +58,17 @@ class _OptionsPageState extends State<OptionsPage> {
   }
 
   Future<void> _reloadIfActiveChanged() async {
+    if (_dirty || !mounted) return;
     final active = await _store.getActive();
     if (active == null) return;
-    if (_profile?.id != active.id) await _load();
+    if (_profile?.id != active.id) {
+      await _load();
+      return;
+    }
+    final m = await _store.getProfileOptions(active.id);
+    if (!mounted) return;
+    _hydrate(m);
+    setState(() => _profile = active);
   }
 
   Future<void> _load() async {
@@ -95,6 +104,7 @@ class _OptionsPageState extends State<OptionsPage> {
     _bypassIpList.text = (m['bypassIpList'] ?? '').toString();
     _dnsRulesList.text = (m['dnsRulesList'] ?? '').toString();
     _allowLan = m['allowLan'] == true;
+    _blockQuic = m['blockQuic'] == true;
     _httpProxyPort.text = (m['httpProxyPort'] ?? '8080').toString();
     _socksProxyPort.text = (m['socksProxyPort'] ?? '1080').toString();
     _routeMode = LaunchRouteMode.fromOptions(m);
@@ -131,6 +141,7 @@ class _OptionsPageState extends State<OptionsPage> {
       ..['dns2'] = _dns2.text.trim()
       ..['mtu'] = int.tryParse(_mtu.text.trim()) ?? 1400
       ..['allowLan'] = _allowLan
+      ..['blockQuic'] = _blockQuic
       ..['bypassIpList'] = _bypassIpList.text
       ..['dnsRulesList'] = _dnsRulesList.text
       ..['httpProxyPort'] = int.tryParse(_httpProxyPort.text.trim()) ?? 8080
@@ -291,6 +302,16 @@ class _OptionsPageState extends State<OptionsPage> {
                           subtitle: const Text('HTTP / SOCKS 监听 0.0.0.0'),
                           onChanged: (v) => setState(() {
                             _allowLan = v;
+                            _markDirty();
+                          }),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _blockQuic,
+                          title: const Text('屏蔽 QUIC'),
+                          subtitle: const Text('屏蔽 UDP/443 防止 QUIC 绕过'),
+                          onChanged: (v) => setState(() {
+                            _blockQuic = v;
                             _markDirty();
                           }),
                         ),

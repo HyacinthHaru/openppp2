@@ -696,7 +696,19 @@ cdnst.net          /cloudflare/tun''';
     } else {
       result = deepMerge(result, Map<String, dynamic>.from(p.options));
     }
-    return patchOptionsForSpeedtest(result);
+    return result;
+  }
+
+  /// Apply a partial update to one profile's launch options.
+  Future<void> updateProfileOptions(
+    String id,
+    void Function(Map<String, dynamic> options) mutate,
+  ) async {
+    final current = await getProfileOptions(id);
+    final next = Map<String, dynamic>.from(current);
+    mutate(next);
+    if (_optionsEqual(current, next)) return;
+    await setProfileOptions(id, next);
   }
 
   static Map<String, dynamic> _deepCopy(Map<String, dynamic> src) {

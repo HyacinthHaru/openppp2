@@ -40,11 +40,27 @@ class _OptionsAdvancedPageState extends State<OptionsAdvancedPage> {
   ConfigProfile? _profile;
   bool _loading = true;
   bool _dirty = false;
+  StreamSubscription<void>? _storeSub;
 
   @override
   void initState() {
     super.initState();
+    _storeSub = _store.changes.listen((_) => _reloadFromStore());
     _load();
+  }
+
+  Future<void> _reloadFromStore() async {
+    if (_dirty || !mounted) return;
+    final active = await _store.getActive();
+    if (active == null) return;
+    if (_profile?.id != active.id) {
+      await _load();
+      return;
+    }
+    final m = await _store.getProfileOptions(active.id);
+    if (!mounted) return;
+    _hydrate(m);
+    setState(() => _profile = active);
   }
 
   Future<void> _load() async {
@@ -197,6 +213,7 @@ class _OptionsAdvancedPageState extends State<OptionsAdvancedPage> {
 
   @override
   void dispose() {
+    _storeSub?.cancel();
     for (final c in [
       _mark,
       _mux,
