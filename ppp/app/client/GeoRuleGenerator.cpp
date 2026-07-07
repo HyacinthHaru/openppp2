@@ -60,7 +60,7 @@ static void FingerprintAppendFile(size_t& fingerprint, const ppp::string& path) 
     FingerprintAppendBytes(fingerprint, &length, sizeof(length));
 }
 
-static GeoOutputPaths ResolveGeoOutputPaths(const ppp::configurations::GeoRules& gr) noexcept {
+static GeoOutputPaths ResolveGeoOutputPaths(const ppp::configurations::GeoRulesConfiguration& gr) noexcept {
     GeoOutputPaths paths;
     ppp::string output_bypass = gr.output_bypass;
     ppp::string output_dns_rules = gr.output_dns_rules;
@@ -128,7 +128,7 @@ static size_t ComputeGeoRulesFingerprint(
 static bool TryLoadGeoRulesCache(
     size_t fingerprint,
     const GeoOutputPaths& paths,
-    GeoRuleGenerateResult& result) noexcept {
+    ppp::app::client::GeoRuleGenerateResult& result) noexcept {
     const ppp::string meta_path = GeoCacheMetaPath(paths.bypass_full);
     const ppp::string meta_text = File::ReadAllText(meta_path.data());
     if (meta_text.empty()) {
@@ -168,7 +168,7 @@ static bool TryLoadGeoRulesCache(
 static void WriteGeoRulesCache(
     size_t fingerprint,
     const GeoOutputPaths& paths,
-    const GeoRuleGenerateResult& result) noexcept {
+    const ppp::app::client::GeoRuleGenerateResult& result) noexcept {
     if (result.output_bypass_path.empty() && result.output_dns_rules_path.empty()) {
         return;
     }
