@@ -80,10 +80,12 @@ class VpnService {
   final _stateController = StreamController<VpnState>.broadcast();
   final _statsController = StreamController<VpnStatistics>.broadcast();
   final _errorController = StreamController<String>.broadcast();
+  final _linkStateController = StreamController<int>.broadcast();
 
   Stream<VpnState> get stateStream => _stateController.stream;
   Stream<VpnStatistics> get statsStream => _statsController.stream;
   Stream<String> get errorStream => _errorController.stream;
+  Stream<int> get linkStateStream => _linkStateController.stream;
 
   VpnState _currentState = VpnState.disconnected;
   VpnState get currentState => _currentState;
@@ -91,6 +93,12 @@ class VpnService {
   VpnStatistics _currentStats = const VpnStatistics();
   VpnStatistics get currentStats => _currentStats;
   String? _lastStatsRaw;
+
+  /// Native link state mirrored from `:vpn` via EventChannel.
+  /// 0=ESTABLISHED, 1=UNKNOWN, 2=CLIENT_UNINIT, 3=EXCHANGE_UNINIT,
+  /// 4=RECONNECTING, 5=CONNECTING, 6=APP_UNINIT.
+  int _currentLinkState = 6;
+  int get currentLinkState => _currentLinkState;
 
   bool _initialized = false;
   StreamSubscription<dynamic>? _eventSubscription;
@@ -125,6 +133,11 @@ class VpnService {
         _applyStatistics(
           value is String ? value : jsonEncode(Map<String, dynamic>.from(value as Map)),
         );
+      } else if (type == 'linkState') {
+        final value = event['value'];
+        if (value is int) {
+          _updateLinkState(value);
+        }
       } else if (type == 'error') {
         final value = event['value']?.toString() ?? 'Unknown VPN error';
         _errorController.add(value);
@@ -137,11 +150,18 @@ class VpnService {
     }
   }
 
+  void _updateLinkState(int value) {
+    if (_currentLinkState == value) return;
+    _currentLinkState = value;
+    _linkStateController.add(value);
+  }
+
   void _updateState(VpnState state) {
     if (_currentState == state) return;
     _currentState = state;
     if (state == VpnState.disconnected) {
       _resetStats();
+      _updateLinkState(6);
     }
     _stateController.add(state);
   }
@@ -267,9 +287,11 @@ class VpnService {
   Future<int> getLinkState() async {
     try {
       final v = await _channel.invokeMethod<int>('getLinkState');
-      return v ?? 1;
+      final linkState = v ?? 1;
+      _updateLinkState(linkState);
+      return linkState;
     } on PlatformException {
-      return 1;
+      return _currentLinkState;
     }
   }
 
@@ -321,5 +343,6 @@ class VpnService {
     _stateController.close();
     _statsController.close();
     _errorController.close();
+    _linkStateController.close();
   }
 }

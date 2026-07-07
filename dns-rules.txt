@@ -30,5 +30,9 @@ le.com             /doh.pub/nic
 360.com            /doh.pub/nic
 
 # Foreign providers
+speedtest.net      /cloudflare/tun
+ookla.com          /cloudflare/tun
+ooklaserver.net    /cloudflare/tun
+cdnst.net          /cloudflare/tun
 google.com         /cloudflare/tun
 youtube.com        /cloudflare/tun

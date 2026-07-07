@@ -53,6 +53,8 @@ class PppVpnService : VpnService() {
 
     private var linkStateThread: HandlerThread? = null
     private var linkStateHandler: Handler? = null
+    private var connectStartedAtMs: Long = 0L
+    private var lastReportedLinkState: Int = 6
     private val linkStatePoller = object : Runnable {
         override fun run() {
             if (!isRunning) return
@@ -62,15 +64,21 @@ class PppVpnService : VpnService() {
                 PppLog.write(this@PppVpnService, "get_link_state poller failed", e)
                 6
             }
-            PppStateStore.setLinkState(this@PppVpnService, ls)
-            // Mirror to currentState only as a hint: do NOT downgrade currentState
-            // here -- the authoritative VPN-service state is event-driven.
+            publishLinkState(ls)
             linkStateHandler?.postDelayed(this, 1000L)
         }
     }
 
+    private fun publishLinkState(value: Int, forceEvent: Boolean = false) {
+        PppStateStore.setLinkState(this, value)
+        if (!forceEvent && value == lastReportedLinkState) return
+        lastReportedLinkState = value
+        MainActivity.sendEvent(mapOf("type" to "linkState", "value" to value))
+    }
+
     private fun startLinkStatePoller() {
         if (linkStateThread != null) return
+        lastReportedLinkState = 6
         val t = HandlerThread("openppp2-linkstate").also { it.start() }
         linkStateThread = t
         val h = Handler(t.looper)
@@ -84,6 +92,7 @@ class PppVpnService : VpnService() {
         linkStateThread?.quitSafely()
         linkStateThread = null
         PppStateStore.clearLinkState(this)
+        publishLinkState(6, forceEvent = true)
     }
 
     override fun onCreate() {
@@ -234,6 +243,8 @@ class PppVpnService : VpnService() {
 
         startForeground(NOTIFICATION_ID, buildNotification("正在连接..."))
         PppLog.write(this, "startForeground done")
+        connectStartedAtMs = android.os.SystemClock.elapsedRealtime()
+        PppLog.write(this, "perf connect_requested")
         notifyStateChanged(1) // connecting
 
         try {
@@ -532,20 +543,40 @@ class PppVpnService : VpnService() {
 
     fun onStarted(key: Int) {
         Log.i(TAG, "VPN started with key: $key")
+        val connectElapsedMs = if (connectStartedAtMs > 0L) {
+            android.os.SystemClock.elapsedRealtime() - connectStartedAtMs
+        } else {
+            -1L
+        }
+        PppLog.write(this, "perf connect_established_ms=$connectElapsedMs")
+        Log.i(TAG, "perf connect_established_ms=$connectElapsedMs")
         PppLog.write(this, "onStarted key=$key")
         PppLog.write(this, "VPN started with key=$key")
         notifyStateChanged(2) // connected
         updateNotification("已连接")
     }
 
+    @Volatile
+    private var lastStatisticsJson: String? = null
+    private var statsPerfLogTicks: Int = 0
+
     fun onStatistics(json: String) {
-        PppLog.write(this, "statistics=$json")
+        if (json == lastStatisticsJson) return
+        lastStatisticsJson = json
         PppStateStore.setStatistics(this, json)
         MainActivity.sendEvent(mapOf("type" to "statistics", "value" to json))
+        statsPerfLogTicks += 1
+        if (statsPerfLogTicks % 10 == 0) {
+            PppLog.write(this, "perf statistics=$json")
+        }
     }
 
     private fun notifyStateChanged(state: Int) {
         currentState = state
+        if (state == 0) {
+            lastStatisticsJson = null
+            statsPerfLogTicks = 0
+        }
         PppStateStore.set(this, state)
         MainActivity.sendEvent(mapOf("type" to "state", "value" to state))
     }

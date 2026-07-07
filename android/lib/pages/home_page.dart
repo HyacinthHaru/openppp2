@@ -37,16 +37,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int _linkState = 6;
   bool _connectInFlight = false;
 
-  Timer? _linkPollTimer;
   Timer? _durationTimer;
   Timer? _connectWatchdogTimer;
-  Timer? _statePollTimer;
-  Timer? _statsPollTimer;
   Timer? _logPollTimer;
 
   StreamSubscription<VpnState>? _stateSub;
   StreamSubscription<VpnStatistics>? _statsSub;
   StreamSubscription<String>? _errorSub;
+  StreamSubscription<int>? _linkStateSub;
   StreamSubscription<void>? _storeSub;
 
   @override
@@ -65,29 +63,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       setState(() => _lastError = error);
       unawaited(_showErrorDialog(error));
     });
+    _linkStateSub = _vpnService.linkStateStream.listen(_applyLinkState);
     _storeSub = _store.changes.listen((_) => _refreshStore());
 
     unawaited(_refreshStore());
     unawaited(_refreshStartupState());
     unawaited(_loadDebugPanelEnabled());
-
-    _statePollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (_state == VpnState.connecting || _state == VpnState.connected) {
-        unawaited(_vpnService.getState());
-      }
-    });
-    _statsPollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == VpnState.connected || _state == VpnState.connecting) {
-        unawaited(_refreshStatistics());
-      }
-    });
-    _linkPollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == VpnState.disconnected || _state == VpnState.disconnecting) {
-        if (_linkState != 6) setState(() => _linkState = 6);
-        return;
-      }
-      unawaited(_refreshLinkState());
-    });
   }
 
   Future<void> _refreshStore() async {
@@ -107,17 +88,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _refreshLinkState() async {
-    final ls = await _vpnService.getLinkState();
+  void _applyLinkState(int ls) {
     if (!mounted) return;
     final wasEstablished = _linkState == 0;
+    final promoteConnected = ls == 0 && _state != VpnState.connected;
+    final demoteReconnecting = wasEstablished &&
+        ls != 0 &&
+        ls != 6 &&
+        _state == VpnState.connected;
+    if (ls == _linkState && !promoteConnected && !demoteReconnecting) return;
+
     setState(() => _linkState = ls);
-    if (ls == 0) {
-      if (_state != VpnState.connected) {
-        _connectWatchdogTimer?.cancel();
-        _applyState(VpnState.connected);
-      }
-    } else if (wasEstablished && _state == VpnState.connected) {
+    if (promoteConnected) {
+      _connectWatchdogTimer?.cancel();
+      _applyState(VpnState.connected);
+    } else if (demoteReconnecting) {
       _applyState(VpnState.connecting);
       _connectedAt = null;
     }
@@ -167,6 +152,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (!mounted) return;
     _applyState(state);
     if (state == VpnState.connected || state == VpnState.connecting) {
+      final linkState = await _vpnService.getLinkState();
+      if (!mounted) return;
+      _applyLinkState(linkState);
       unawaited(_refreshStatistics());
     }
   }
@@ -270,8 +258,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         return;
       }
       // Prefer native link state ESTABLISHED (0) over onStarted log markers.
-      final linkState = await _vpnService.getLinkState();
-      if (linkState == 0) {
+      if (_linkState == 0) {
         timer.cancel();
         if (!mounted) return;
         _applyState(VpnState.connected);
@@ -472,12 +459,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _stateSub?.cancel();
     _statsSub?.cancel();
     _errorSub?.cancel();
+    _linkStateSub?.cancel();
     _storeSub?.cancel();
     _connectWatchdogTimer?.cancel();
-    _statePollTimer?.cancel();
-    _statsPollTimer?.cancel();
     _logPollTimer?.cancel();
-    _linkPollTimer?.cancel();
     _durationTimer?.cancel();
     super.dispose();
   }

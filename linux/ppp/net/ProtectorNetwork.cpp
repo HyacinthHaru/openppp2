@@ -57,6 +57,10 @@
 
 #include <common/unix/UnixAfx.h>
 
+#if defined(_ANDROID)
+#include <android/OpenPPP2VpnProtectBridge.h>
+#endif
+
 using ppp::net::Socket;
 
 namespace ppp
@@ -287,9 +291,7 @@ namespace ppp
 #if defined(_ANDROID)
         bool ProtectorNetwork::ProtectJNI(JNIEnv* env, jint fd) noexcept
         {
-            // Java class function signature, you can see the header file of this function, 
-            // There are specific Java code examples and descriptions, 
-            // The signature is roughly: public static boolean protect(int sockfd) { return false; }
+            (void)env;
             if (fd == -1) /* https://blog.csdn.net/u010126792/article/details/82348438 */
             {
                 ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::ProtectorNetworkProtectInvalidSocket);
@@ -297,50 +299,7 @@ namespace ppp
                 return false;
             }
 
-            if (NULLPTR == env)
-            {
-                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::RuntimeEnvironmentInvalid);
-                ppp::telemetry::Count("protect.android.fail.env", 1);
-                return false;
-            }
-
-            jclass clazz = env->FindClass(LIBOPENPPP2_CLASSNAME);
-            if (NULLPTR != env->ExceptionOccurred())
-            {
-                env->ExceptionClear();
-            }
-
-            if (NULLPTR == clazz)
-            {
-                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::RuntimeEnvironmentInvalid);
-                ppp::telemetry::Count("protect.android.fail.class", 1);
-                return false;
-            }
-
-            jboolean result = false;
-            jmethodID method = env->GetStaticMethodID(clazz, "protect", "(I)Z");
-            if (NULLPTR != env->ExceptionOccurred())
-            {
-                env->ExceptionClear();
-            }
-            elif (NULLPTR != method)
-            {
-                result = env->CallStaticBooleanMethod(clazz, method, fd);
-                if (env->ExceptionCheck())
-                {
-                    env->ExceptionDescribe();
-                    env->ExceptionClear();
-                    ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::RuntimeEventDispatchFailed);
-                    ppp::telemetry::Count("protect.android.fail.exception", 1);
-                    result = false;
-                }
-            }
-            else {
-                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::RuntimeEventDispatchFailed);
-                ppp::telemetry::Count("protect.android.fail.method", 1);
-            }
-
-            env->DeleteLocalRef(clazz);
+            const bool result = ppp::android::ProtectSocketFd(static_cast<int>(fd));
             if (!result) {
                 ppp::telemetry::Count("protect.android.fail.false", 1);
             }

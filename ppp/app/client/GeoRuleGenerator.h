@@ -47,6 +47,7 @@ namespace ppp {
                 int             bypass_line_count = 0;   ///< Number of CIDR lines written to the bypass output.
                 int             dns_rule_line_count = 0; ///< Number of DNS rule lines written to the DNS rules output.
                 int             skipped_lines = 0;       ///< Total skipped/invalid lines across all inputs.
+                bool            cache_hit = false;       ///< True when existing generated outputs were reused.
             };
 
             /**

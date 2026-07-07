@@ -51,8 +51,9 @@ object PppStateStore {
      * Cross-process link state. The native libopenppp2 state lives in the
      * `:vpn` process; the UI/Flutter process cannot call get_link_state()
      * directly because each process has its own copy of the loaded library.
-     * Instead, [PppVpnService] polls the native value and writes it here,
-     * and [MainActivity] reads from here.
+     * Instead, [PppVpnService] polls the native value, writes it here for
+     * liveness/heartbeat, and pushes changes to Flutter via EventChannel;
+     * [MainActivity] reads from here only for one-shot queries.
      *
      * Values mirror the native enum in libopenppp2.cpp:
      *   0 ESTABLISHED, 1 UNKNOWN, 2 CLIENT_UNINITIALIZED,

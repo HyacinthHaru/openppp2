@@ -28,8 +28,8 @@ class _OptionsAdvancedPageState extends State<OptionsAdvancedPage> {
   final _geoOutputDnsRules = TextEditingController();
 
   bool _vnet = false;
-  bool _blockQuic = true;
-  bool _staticMode = false;
+  bool _blockQuic = false;
+  bool _staticMode = true;
   bool _geoEnabled = true;
   bool _proxyOnly = false;
   bool _perAppProxyEnabled = false;

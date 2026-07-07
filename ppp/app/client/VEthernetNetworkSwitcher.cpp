@@ -39,6 +39,21 @@
 #if defined(_ANDROID)
 #include <android/log.h>
 #include <android/OpenPPP2VpnProtectBridge.h>
+
+static bool AndroidDnsRedirectTraceEnabled() noexcept {
+#ifdef NDEBUG
+    return false;
+#else
+    return true;
+#endif
+}
+
+#define ANDROID_DNS_REDIRECT_TRACE(...) \
+    do { \
+        if (AndroidDnsRedirectTraceEnabled()) { \
+            __android_log_print(ANDROID_LOG_INFO, "openppp2", __VA_ARGS__); \
+        } \
+    } while (0)
 #endif
 
 /**
@@ -646,7 +661,7 @@ namespace ppp {
                 int destinationPort = frame->Destination.Port;
                 if (destinationPort == PPP_DNS_SYS_PORT) {
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2",
+ANDROID_DNS_REDIRECT_TRACE(
                         "dns_redirect udp53 input src_port=%d dst_port=%d payload=%d dst=%s",
                         (int)frame->Source.Port,
                         (int)frame->Destination.Port,
@@ -655,7 +670,7 @@ namespace ppp {
 #endif
                     if (RedirectDnsServer(exchanger, packet, frame, messages)) {
 #if defined(_ANDROID)
-                        __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect udp53 handled");
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect udp53 handled");
 #endif
                         return true;
                     }
@@ -797,7 +812,7 @@ namespace ppp {
                 // state in the native exchanger and crash the VPN process.
                 if (frame->Type != IcmpType::ICMP_ECHO && frame->Type != IcmpType::ICMP_ER) {
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_drop unsupported type=%d code=%d dst=%s",
+ANDROID_DNS_REDIRECT_TRACE( "icmp_drop unsupported type=%d code=%d dst=%s",
                         (int)frame->Type,
                         (int)frame->Code,
                         Ipep::ToAddress(packet->Destination).to_string().c_str());
@@ -807,13 +822,13 @@ namespace ppp {
 
                 elif(IPAddressIsGatewayServer(frame->Destination, tap->GatewayServer, tap->SubmaskAddress)) {
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_gateway dst=%s", Ipep::ToAddress(packet->Destination).to_string().c_str());
+ANDROID_DNS_REDIRECT_TRACE( "icmp_gateway dst=%s", Ipep::ToAddress(packet->Destination).to_string().c_str());
 #endif
                     return EchoGatewayServer(exchanger, packet, allocator);
                 }
                 elif(frame->Ttl == 1) {
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_ttl1 dst=%s", Ipep::ToAddress(packet->Destination).to_string().c_str());
+ANDROID_DNS_REDIRECT_TRACE( "icmp_ttl1 dst=%s", Ipep::ToAddress(packet->Destination).to_string().c_str());
 #endif
                     return EchoGatewayServer(exchanger, packet, allocator);
                 }
@@ -827,7 +842,7 @@ namespace ppp {
                     packet->Ttl = ttl;
 
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_other dst=%s ttl=%d", Ipep::ToAddress(packet->Destination).to_string().c_str(), ttl);
+ANDROID_DNS_REDIRECT_TRACE( "icmp_other dst=%s ttl=%d", Ipep::ToAddress(packet->Destination).to_string().c_str(), ttl);
 #endif
                     return EchoOtherServer(exchanger, packet, allocator);
                 }
@@ -856,7 +871,7 @@ namespace ppp {
                 if ((static_mode_ && static_.icmp) && exchanger->StaticEchoAllocated()) {
                     bool se_ok = exchanger->StaticEchoPacketToRemoteExchanger(packet.get());
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_other static_echo dst=%s ok=%d",
+ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                         Ipep::ToAddress(packet->Destination).to_string().c_str(), (int)se_ok);
 #endif
                     if (se_ok) {
@@ -917,7 +932,7 @@ namespace ppp {
                         }
                         elif(exchanger->Echo(ack_id)) {
 #if defined(_ANDROID)
-                            __android_log_print(ANDROID_LOG_INFO, "openppp2", "icmp_gateway echo ack_id=%d ok=1", ack_id);
+        ANDROID_DNS_REDIRECT_TRACE( "icmp_gateway echo ack_id=%d ok=1", ack_id);
 #endif
                             return true;
                         }
@@ -2067,7 +2082,7 @@ namespace ppp {
                     // The next hop gateway of the route in the IsBypassIpAddress function.
                     bool bypass_loaded = rib->AddAllRoutes(bypass_ip_list, IPEndPoint::LoopbackAddress);
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "bypass_ip_list load len=%d ok=%d",
+ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                         (int)bypass_ip_list.size(), bypass_loaded ? 1 : 0);
 #endif
                     ppp::telemetry::Log(Level::kDebug, "client", "bypass list updated");
@@ -3624,7 +3639,7 @@ namespace ppp {
 
                 int handle = socket->native_handle();
 #if defined(_ANDROID)
-                __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect socket_open fd=%d server=%s port=%d",
+                ANDROID_DNS_REDIRECT_TRACE("dns_redirect socket_open fd=%d server=%s port=%d",
                     handle,
                     serverIP.to_string().c_str(),
                     (int)frame->Destination.Port);
@@ -3650,7 +3665,7 @@ namespace ppp {
                             return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::TunnelProtectionConfigureFailed);
                         }
 #if defined(_ANDROID)
-                        __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect protect ok fd=%d server=%s",
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect protect ok fd=%d server=%s",
                             handle,
                             serverIP.to_string().c_str());
 #endif
@@ -3677,7 +3692,7 @@ namespace ppp {
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::UdpSendFailed);
                 }
 #if defined(_ANDROID)
-                __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect send ok fd=%d server=%s bytes=%d",
+                ANDROID_DNS_REDIRECT_TRACE("dns_redirect send ok fd=%d server=%s bytes=%d",
                     handle,
                     serverIP.to_string().c_str(),
                     NULLPTR != messages ? (int)messages->Length : -1);
@@ -3736,7 +3751,7 @@ namespace ppp {
                                 }
 
 #if defined(_ANDROID)
-                                __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect recv ok fd=%d bytes=%d",
+            ANDROID_DNS_REDIRECT_TRACE( "dns_redirect recv ok fd=%d bytes=%d",
                                     handle,
                                     (int)sz);
 #endif
@@ -3863,7 +3878,7 @@ namespace ppp {
                 boost::asio::ip::address destinationIP = Ipep::ToAddress(packet->Destination);
                 ::dns::QuestionSection& qs = *m.questions.data();
 #if defined(_ANDROID)
-                __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect query host=%s type=%d dst=%s",
+                ANDROID_DNS_REDIRECT_TRACE("dns_redirect query host=%s type=%d dst=%s",
                     qs.mName.c_str(),
                     (int)qs.mType,
                     destinationIP.to_string().c_str());
@@ -3899,7 +3914,7 @@ namespace ppp {
 
                     if (m.encode(dns_packet, PPP_MAX_DNS_PACKET_BUFFER_SIZE, dns_size) == ::dns::BufferResult::NoError && dns_size > 0) {
 #if defined(_ANDROID)
-                        __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect cache hit host=%s bytes=%d",
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect cache hit host=%s bytes=%d",
                             qs.mName.c_str(),
                             (int)dns_size);
 #endif
@@ -3976,7 +3991,7 @@ namespace ppp {
 
                     serverIP = dnsServers->begin()->address();
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect gateway upstream=%s host=%s",
+ANDROID_DNS_REDIRECT_TRACE( "dns_redirect gateway upstream=%s host=%s",
                         serverIP.to_string().c_str(),
                         qs.mName.c_str());
 #endif
@@ -3990,7 +4005,7 @@ namespace ppp {
 
 #if defined(_ANDROID)
                         serverIP = destinationIP;
-                        __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect android fallback upstream=%s host=%s",
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect android fallback upstream=%s host=%s",
                             serverIP.to_string().c_str(),
                             qs.mName.c_str());
 #else
@@ -4032,7 +4047,7 @@ namespace ppp {
                         // Legacy IP-based path: direct UDP forwarding to rulePtr->Server.
                         serverIP = rulePtr->Server;
 #if defined(_ANDROID)
-                        __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect rule upstream=%s host=%s",
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect rule upstream=%s host=%s",
                             serverIP.to_string().c_str(),
                             qs.mName.c_str());
 #endif
@@ -4064,7 +4079,7 @@ namespace ppp {
                         buffer = std::shared_ptr<Byte>(new Byte[PPP_BUFFER_SIZE], std::default_delete<Byte[]>());
                     }
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_INFO, "openppp2", "dns_redirect temp buffer alloc host=%s ptr=%p",
+ANDROID_DNS_REDIRECT_TRACE( "dns_redirect temp buffer alloc host=%s ptr=%p",
                         qs.mName.c_str(),
                         buffer.get());
 #endif

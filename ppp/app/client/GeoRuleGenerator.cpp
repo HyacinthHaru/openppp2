@@ -6,10 +6,12 @@
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/Telemetry.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
+#include <ppp/hash/hash_bytes.h>
 
 #include <common/chnroutes2/chnroutes2.h>
 
 #include <ctime>
+#include <cstdio>
 #include <boost/filesystem.hpp>
 
 /**
@@ -26,6 +28,169 @@
 
 using ppp::io::File;
 using ppp::telemetry::Level;
+
+namespace {
+
+constexpr const char* kGeoCacheVersion = "v1";
+
+struct GeoOutputPaths final {
+    ppp::string bypass_full;
+    ppp::string dns_full;
+};
+
+static void FingerprintAppendBytes(size_t& fingerprint, const void* data, size_t length) noexcept {
+    fingerprint = ppp::hash_bytes::_Hash_bytes(data, length, fingerprint);
+}
+
+static void FingerprintAppendString(size_t& fingerprint, const ppp::string& value) noexcept {
+    if (!value.empty()) {
+        FingerprintAppendBytes(fingerprint, value.data(), value.size());
+    }
+    static const char delimiter = '\x1e';
+    FingerprintAppendBytes(fingerprint, &delimiter, sizeof(delimiter));
+}
+
+static void FingerprintAppendFile(size_t& fingerprint, const ppp::string& path) noexcept {
+    FingerprintAppendString(fingerprint, path);
+    if (path.empty() || !File::Exists(path.data())) {
+        return;
+    }
+
+    const int length = File::GetLength(path.data());
+    FingerprintAppendBytes(fingerprint, &length, sizeof(length));
+}
+
+static GeoOutputPaths ResolveGeoOutputPaths(const ppp::configurations::GeoRules& gr) noexcept {
+    GeoOutputPaths paths;
+    ppp::string output_bypass = gr.output_bypass;
+    ppp::string output_dns_rules = gr.output_dns_rules;
+    if (output_bypass.empty()) {
+        output_bypass = "./generated/bypass-cn.txt";
+    }
+    if (output_dns_rules.empty()) {
+        output_dns_rules = "./generated/dns-rules-cn.txt";
+    }
+
+    paths.bypass_full = File::GetFullPath(File::RewritePath(output_bypass.data()).data());
+    paths.dns_full = File::GetFullPath(File::RewritePath(output_dns_rules.data()).data());
+    if (paths.bypass_full.empty()) {
+        paths.bypass_full = output_bypass;
+    }
+    if (paths.dns_full.empty()) {
+        paths.dns_full = output_dns_rules;
+    }
+    return paths;
+}
+
+static ppp::string GeoCacheMetaPath(const ppp::string& bypass_full) noexcept {
+    return bypass_full + ".geo-cache";
+}
+
+static size_t ComputeGeoRulesFingerprint(
+    const ppp::configurations::AppConfiguration& config,
+    const ppp::string& domestic_provider,
+    const ppp::vector<ppp::string>* bypass_sources) noexcept {
+    size_t fingerprint = 0x6f70f56e;
+    const auto& gr = config.geo_rules;
+
+    FingerprintAppendString(fingerprint, gr.country);
+    FingerprintAppendString(fingerprint, domestic_provider);
+    FingerprintAppendString(fingerprint, gr.dns_provider_foreign);
+    FingerprintAppendString(fingerprint, gr.geoip_download_url);
+    FingerprintAppendString(fingerprint, gr.geosite_download_url);
+    FingerprintAppendFile(fingerprint, gr.geoip_dat);
+    FingerprintAppendFile(fingerprint, gr.geosite_dat);
+
+    for (const auto& path : gr.geoip) {
+        FingerprintAppendFile(fingerprint, path);
+    }
+    for (const auto& path : gr.geosite) {
+        FingerprintAppendFile(fingerprint, path);
+    }
+    for (const auto& entry : gr.append_bypass) {
+        FingerprintAppendString(fingerprint, entry);
+    }
+    for (const auto& entry : gr.append_dns_rules) {
+        FingerprintAppendString(fingerprint, entry);
+    }
+    FingerprintAppendString(fingerprint, config.dns.servers.domestic);
+    FingerprintAppendString(fingerprint, config.dns.servers.foreign);
+
+    if (NULLPTR != bypass_sources) {
+        for (const auto& path : *bypass_sources) {
+            FingerprintAppendFile(fingerprint, path);
+        }
+    }
+
+    return fingerprint;
+}
+
+static bool TryLoadGeoRulesCache(
+    size_t fingerprint,
+    const GeoOutputPaths& paths,
+    GeoRuleGenerateResult& result) noexcept {
+    const ppp::string meta_path = GeoCacheMetaPath(paths.bypass_full);
+    const ppp::string meta_text = File::ReadAllText(meta_path.data());
+    if (meta_text.empty()) {
+        return false;
+    }
+
+    size_t cached_fp = 0;
+    int bypass_lines = 0;
+    int dns_lines = 0;
+    unsigned long long cached_fp_raw = 0;
+    if (std::sscanf(meta_text.data(), "%*s%llu %d %d", &cached_fp_raw, &bypass_lines, &dns_lines) < 3) {
+        return false;
+    }
+    cached_fp = static_cast<size_t>(cached_fp_raw);
+    if (cached_fp != fingerprint) {
+        return false;
+    }
+
+    const bool bypass_ok = bypass_lines <= 0 || File::Exists(paths.bypass_full.data());
+    const bool dns_ok = dns_lines <= 0 || File::Exists(paths.dns_full.data());
+    if (!bypass_ok || !dns_ok) {
+        return false;
+    }
+
+    if (bypass_lines > 0) {
+        result.output_bypass_path = paths.bypass_full;
+        result.bypass_line_count = bypass_lines;
+    }
+    if (dns_lines > 0) {
+        result.output_dns_rules_path = paths.dns_full;
+        result.dns_rule_line_count = dns_lines;
+    }
+    result.cache_hit = true;
+    return true;
+}
+
+static void WriteGeoRulesCache(
+    size_t fingerprint,
+    const GeoOutputPaths& paths,
+    const GeoRuleGenerateResult& result) noexcept {
+    if (result.output_bypass_path.empty() && result.output_dns_rules_path.empty()) {
+        return;
+    }
+
+    char buffer[128] = {};
+    const int written = std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "%s\n%llu %d %d\n",
+        kGeoCacheVersion,
+        static_cast<unsigned long long>(fingerprint),
+        result.bypass_line_count,
+        result.dns_rule_line_count);
+    if (written <= 0 || static_cast<size_t>(written) >= sizeof(buffer)) {
+        return;
+    }
+
+    const ppp::string meta_path = GeoCacheMetaPath(paths.bypass_full);
+    File::WriteAllBytes(meta_path.data(), buffer, written);
+}
+
+} // namespace
 
 namespace ppp {
     namespace app {
@@ -688,6 +853,18 @@ namespace ppp {
                     domestic_provider = "doh.pub";
                 }
 
+                const GeoOutputPaths output_paths = ResolveGeoOutputPaths(gr);
+                const size_t fingerprint = ComputeGeoRulesFingerprint(config, domestic_provider, bypass_sources);
+                if (TryLoadGeoRulesCache(fingerprint, output_paths, result)) {
+                    ppp::telemetry::Count("geo-rules.cache_hit", 1);
+                    ppp::telemetry::Log(Level::kInfo, "geo-rules",
+                        "cache hit: bypass=%d dns=%d fp=%zx",
+                        result.bypass_line_count,
+                        result.dns_rule_line_count,
+                        fingerprint);
+                    return result;
+                }
+
                 ppp::telemetry::Log(Level::kInfo, "geo-rules",
                     "generating geo-rules: country=%s provider=%s",
                     gr.country.data(), domestic_provider.data());
@@ -802,26 +979,8 @@ namespace ppp {
                 // ----------------------------------------------------------
                 // Phase 5: Write output files.
                 // ----------------------------------------------------------
-                ppp::string output_bypass = gr.output_bypass;
-                ppp::string output_dns_rules = gr.output_dns_rules;
-
-                if (output_bypass.empty()) {
-                    output_bypass = "./generated/bypass-cn.txt";
-                }
-                if (output_dns_rules.empty()) {
-                    output_dns_rules = "./generated/dns-rules-cn.txt";
-                }
-
-                // Resolve to absolute paths.
-                ppp::string bypass_full = File::GetFullPath(File::RewritePath(output_bypass.data()).data());
-                ppp::string dns_full    = File::GetFullPath(File::RewritePath(output_dns_rules.data()).data());
-
-                if (bypass_full.empty()) {
-                    bypass_full = output_bypass;
-                }
-                if (dns_full.empty()) {
-                    dns_full = output_dns_rules;
-                }
+                ppp::string bypass_full = output_paths.bypass_full;
+                ppp::string dns_full = output_paths.dns_full;
 
                 // Write bypass file.
                 if (!cidr_set.empty()) {
@@ -899,6 +1058,10 @@ namespace ppp {
                 }
 
                 result.skipped_lines = skipped;
+
+                if (!result.cache_hit) {
+                    WriteGeoRulesCache(fingerprint, output_paths, result);
+                }
 
                 ppp::telemetry::Count("geo-rules.bypass_lines", result.bypass_line_count);
                 ppp::telemetry::Count("geo-rules.dns_rules", result.dns_rule_line_count);

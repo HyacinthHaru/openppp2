@@ -71,7 +71,7 @@ class ProfileStore {
       "ttl": 60,
       "cache": true,
       "turbo": false,
-      "redirect": "0.0.0.0"
+      "redirect": "8.8.8.8:53"
     },
     "listen": { "port": 20000 },
     "static": {
@@ -131,6 +131,12 @@ class ProfileStore {
   }
 }''';
 
+  /// Foreign DNS rules for Ookla / Speedtest (force tunnel resolver path).
+  static const String defaultSpeedtestDnsRules = '''speedtest.net      /cloudflare/tun
+ookla.com          /cloudflare/tun
+ooklaserver.net    /cloudflare/tun
+cdnst.net          /cloudflare/tun''';
+
   static const Map<String, dynamic> defaultOptions = {
     'tunIp': '10.0.0.2',
     'tunMask': '255.255.255.0',
@@ -144,10 +150,10 @@ class ProfileStore {
     'mark': 0,
     'mux': 0,
     'vnet': false,
-    'blockQuic': true,
-    'staticMode': false,
+    'blockQuic': false,
+    'staticMode': true,
     'bypassIpList': '',
-    'dnsRulesList': '',
+    'dnsRulesList': defaultSpeedtestDnsRules,
     // ---- Per-app proxy ----
     // When [perAppProxyEnabled] is true, the VpnService.Builder restricts
     // proxied traffic to the package list in [perAppProxyApps]. Mode picks
@@ -576,10 +582,89 @@ class ProfileStore {
     await _writeProfiles(prefs, list);
   }
 
+  static const _speedtestCompatKey = 'vpn_speedtest_compat_applied_v1';
+
+  /// Append Ookla/Speedtest DNS rules when missing so GEO split does not
+  /// resolve test hosts through domestic ECS edges.
+  static String ensureSpeedtestDnsRules(String existing) {
+    const needles = [
+      'speedtest.net',
+      'ookla.com',
+      'ooklaserver.net',
+      'cdnst.net',
+    ];
+    final lower = existing.toLowerCase();
+    if (needles.every(lower.contains)) {
+      return existing;
+    }
+    final buf = StringBuffer();
+    if (existing.trim().isNotEmpty) {
+      buf.writeln(existing.trimRight());
+    }
+    for (final line in defaultSpeedtestDnsRules.split('\n')) {
+      final domain = line.trim().split(RegExp(r'\s+')).first;
+      if (!lower.contains(domain.toLowerCase())) {
+        buf.writeln(line);
+      }
+    }
+    return buf.toString().trimRight();
+  }
+
+  static Map<String, dynamic> patchOptionsForSpeedtest(
+    Map<String, dynamic> options,
+  ) {
+    final out = Map<String, dynamic>.from(options);
+    out['staticMode'] = true;
+    if (out['blockQuic'] == true) {
+      out['blockQuic'] = false;
+    }
+    out['dnsRulesList'] = ensureSpeedtestDnsRules(
+      (out['dnsRulesList'] ?? '').toString(),
+    );
+    return out;
+  }
+
+  Future<void> _applySpeedtestCompatMigration() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_speedtestCompatKey) == true) return;
+
+    final list = await getProfiles();
+    var profilesChanged = false;
+    final updated = <ConfigProfile>[];
+    for (final profile in list) {
+      final patched = patchOptionsForSpeedtest(profile.options);
+      if (!_optionsEqual(profile.options, patched)) {
+        updated.add(profile.copyWith(options: patched));
+        profilesChanged = true;
+      } else {
+        updated.add(profile);
+      }
+    }
+    if (profilesChanged) {
+      await _writeProfiles(prefs, updated);
+    }
+
+    final global = await getOptions();
+    final patchedGlobal = patchOptionsForSpeedtest(global);
+    if (!_optionsEqual(global, patchedGlobal)) {
+      await setOptions(patchedGlobal);
+    }
+
+    await prefs.setBool(_speedtestCompatKey, true);
+  }
+
+  static bool _optionsEqual(
+    Map<String, dynamic> a,
+    Map<String, dynamic> b,
+  ) {
+    return jsonEncode(a) == jsonEncode(b);
+  }
+
   /// Returns the effective per-profile launch options: profile-specific
   /// values overlaid on top of [defaultOptions]. Falls back to the global
   /// (legacy) options blob when both are empty so old installs keep working.
   Future<Map<String, dynamic>> getProfileOptions(String id) async {
+    await _applySpeedtestCompatMigration();
     final list = await getProfiles();
     final p = list.firstWhere(
       (e) => e.id == id,
@@ -611,7 +696,7 @@ class ProfileStore {
     } else {
       result = deepMerge(result, Map<String, dynamic>.from(p.options));
     }
-    return result;
+    return patchOptionsForSpeedtest(result);
   }
 
   static Map<String, dynamic> _deepCopy(Map<String, dynamic> src) {

@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <chrono>
 
 #include <signal.h>
 #include <setjmp.h>
@@ -318,6 +319,13 @@ public:
     std::shared_ptr<ppp::string>                                            bypass_ip_list_;
     std::shared_ptr<ppp::string>                                            dns_rules_list_;
     ppp::transmissions::ITransmissionStatistics                             transmission_statistics_;
+    struct {
+        uint64_t                                                            tx = UINT64_MAX;
+        uint64_t                                                            rx = UINT64_MAX;
+        uint64_t                                                            in = UINT64_MAX;
+        uint64_t                                                            out = UINT64_MAX;
+    }                                                                       last_reported_statistics_;
+    uint32_t                                                                stats_perf_log_ticks_ = 0;
 
 private:
     bool                                                                    ReportTransmissionStatistics() noexcept;
@@ -443,7 +451,31 @@ bool                                                                        libo
         json["out"] = stl::to_string<ppp::string>(statistics->OutgoingTraffic.load());
     }
 
-    std::shared_ptr<ppp::string> json_string = ppp::make_shared_object<ppp::string>(JsonAuxiliary::ToStyledString(json));
+    const uint64_t in_total = json.isMember("in") ? JsonAuxiliary::AsUInt64(json["in"]) : 0;
+    const uint64_t out_total = json.isMember("out") ? JsonAuxiliary::AsUInt64(json["out"]) : 0;
+    if (last_reported_statistics_.tx == TransmissionStatistics.outgoing_traffic &&
+        last_reported_statistics_.rx == TransmissionStatistics.incoming_traffic &&
+        last_reported_statistics_.in == in_total &&
+        last_reported_statistics_.out == out_total) {
+        return true;
+    }
+
+    last_reported_statistics_.tx = TransmissionStatistics.outgoing_traffic;
+    last_reported_statistics_.rx = TransmissionStatistics.incoming_traffic;
+    last_reported_statistics_.in = in_total;
+    last_reported_statistics_.out = out_total;
+
+    ++stats_perf_log_ticks_;
+    if ((stats_perf_log_ticks_ % 10) == 0) {
+        __android_log_print(ANDROID_LOG_INFO, "libopenppp2",
+            "perf throughput tx=%llu rx=%llu in=%llu out=%llu",
+            static_cast<unsigned long long>(TransmissionStatistics.outgoing_traffic),
+            static_cast<unsigned long long>(TransmissionStatistics.incoming_traffic),
+            static_cast<unsigned long long>(in_total),
+            static_cast<unsigned long long>(out_total));
+    }
+
+    std::shared_ptr<ppp::string> json_string = ppp::make_shared_object<ppp::string>(JsonAuxiliary::ToString(json));
     if (NULLPTR == json_string) {
         return false;
     }
@@ -671,6 +703,8 @@ bool                                                                        libo
     bypass_ip_list_.reset();
     dns_rules_list_.reset();
     transmission_statistics_.Clear();
+    last_reported_statistics_ = {};
+    stats_perf_log_ticks_ = 0;
     return any;
 }
 
@@ -1412,6 +1446,7 @@ static int                                                                      
     std::shared_ptr<VEthernetNetworkSwitcher>&                                      client,
     std::shared_ptr<libopenppp2_network_interface>                                  network_interface,
     std::shared_ptr<AppConfiguration>                                               configuration) noexcept {
+    const auto open_switcher_begin = std::chrono::steady_clock::now();
 
     bool lwip = false;
     int max_concurrent = ppp::GetProcesserCount();
@@ -1424,6 +1459,7 @@ static int                                                                      
     else {
         client->Mux(&network_interface->VMux);
         client->StaticMode(&network_interface->StaticMode);
+        client->BlockQUIC(network_interface->BlockQUIC);
     }
 
     const bool proxy_only_runtime = configuration->client.proxy_only;
@@ -1469,6 +1505,7 @@ static int                                                                      
     //   - output_dns_rules: newline-separated DNS redirect rules
     // We then feed those files back into the client.
     if (!proxy_only_runtime && configuration->geo_rules.enabled) {
+        const auto geo_begin = std::chrono::steady_clock::now();
         __android_log_print(ANDROID_LOG_INFO, "libopenppp2",
             "open_switcher: geo-rules enabled country=%s geoip_dat=%s geosite_dat=%s",
             configuration->geo_rules.country.data(),
@@ -1478,10 +1515,14 @@ static int                                                                      
         ppp::app::client::GeoRuleGenerateResult geo_result =
             ppp::app::client::GeoRuleGenerator::Generate(*configuration, NULLPTR);
 
+        const auto geo_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - geo_begin).count();
         __android_log_print(ANDROID_LOG_INFO, "libopenppp2",
-            "open_switcher: geo-rules generated bypass=%s(%d) dns_rules=%s(%d)",
+            "open_switcher: geo-rules %s bypass=%s(%d) dns_rules=%s(%d) elapsed_ms=%lld",
+            geo_result.cache_hit ? "cache_hit" : "generated",
             geo_result.output_bypass_path.data(), geo_result.bypass_line_count,
-            geo_result.output_dns_rules_path.data(), geo_result.dns_rule_line_count);
+            geo_result.output_dns_rules_path.data(), geo_result.dns_rule_line_count,
+            static_cast<long long>(geo_elapsed_ms));
 
         // Merge generated bypass CIDRs with any user-provided ones.
         if (!geo_result.output_bypass_path.empty()) {
@@ -1539,7 +1580,11 @@ static int                                                                      
 
     std::atomic_store(&app->client_, client);
     libopenppp2_application::Timeout();
-    __android_log_print(ANDROID_LOG_INFO, "libopenppp2", "open_switcher: success");
+    const auto open_switcher_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - open_switcher_begin).count();
+    __android_log_print(ANDROID_LOG_INFO, "libopenppp2",
+        "open_switcher: success elapsed_ms=%lld",
+        static_cast<long long>(open_switcher_elapsed_ms));
     return LIBOPENPPP2_ERROR_SUCCESS;
 }
 
