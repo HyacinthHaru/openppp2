@@ -150,28 +150,34 @@ final class OpenPPP2PacketTunnelAdapter {
                     bypassIpList.withCString { bypassPtr in
                         options.dnsRulesList.withCString { rulesPtr in
                             rootPath.withCString { rootPtr in
-                                var nativeOptions = openppp2_ios_tunnel_options(
-                                    mux: Int32(options.mux),
-                                    vnet: options.vnet ? 1 : 0,
-                                    lwip: options.lwip ? 1 : 0,
-                                    block_quic: options.blockQuic ? 1 : 0,
-                                    static_mode: options.staticMode ? 1 : 0,
-                                    ip: ipPtr,
-                                    mask: maskPtr,
-                                    bypass_ip_list: bypassPtr,
-                                    dns_rules_list: rulesPtr,
-                                    root_path: rootPtr,
-                                    packet_logging: packetFlowConsoleLoggingEnabled ? 1 : 0
-                                )
+                                options.dns1.withCString { dns1Ptr in
+                                    options.dns2.withCString { dns2Ptr in
+                                        var nativeOptions = openppp2_ios_tunnel_options(
+                                            mux: Int32(options.mux),
+                                            vnet: options.vnet ? 1 : 0,
+                                            lwip: options.lwip ? 1 : 0,
+                                            block_quic: options.blockQuic ? 1 : 0,
+                                            static_mode: options.staticMode ? 1 : 0,
+                                            ip: ipPtr,
+                                            mask: maskPtr,
+                                            bypass_ip_list: bypassPtr,
+                                            dns_rules_list: rulesPtr,
+                                            root_path: rootPtr,
+                                            packet_logging: packetFlowConsoleLoggingEnabled ? 1 : 0,
+                                            dns1: dns1Ptr,
+                                            dns2: dns2Ptr
+                                        )
 
-                                let code = openppp2_ios_tap_start(
-                                    tap,
-                                    configPtr,
-                                    &nativeOptions,
-                                    openPPP2StatisticsWriter,
-                                    userData
-                                )
-                                return code == 0
+                                        let code = openppp2_ios_tap_start(
+                                            tap,
+                                            configPtr,
+                                            &nativeOptions,
+                                            openPPP2StatisticsWriter,
+                                            userData
+                                        )
+                                        return code == 0
+                                    }
+                                }
                             }
                         }
                     }

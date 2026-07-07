@@ -122,22 +122,17 @@ final class HomeViewController: UIViewController {
 
         switch status {
         case .connected:
-            if linkState == 0 {
-                statusText = L10n.tr("home.connected")
-                connectedAt = connectedAt ?? Date()
-                updateElapsedText()
-                statusDetail = elapsedText
-                isConnected = true
-                stopConnectWatchdog()
-                startTimer()
-            } else {
-                statusText = connectingText(for: linkState, debugPanelEnabled: debugPanelEnabled)
-                statusDetail = L10n.tr("home.vpnStarting")
-                isBusy = true
+            statusText = L10n.tr("home.connected")
+            connectedAt = connectedAt ?? Date()
+            updateElapsedText()
+            statusDetail = linkState == 0
+                ? elapsedText
+                : (debugPanelEnabled ? connectingText(for: linkState, debugPanelEnabled: true) : elapsedText)
+            isConnected = true
+            stopConnectWatchdog()
+            startTimer()
+            if linkState != 0 {
                 startPolling()
-                if connectStartedAt == nil {
-                    startConnectWatchdog()
-                }
             }
         case .connecting:
             statusText = connectingText(for: linkState, debugPanelEnabled: debugPanelEnabled)
@@ -296,7 +291,6 @@ final class HomeViewController: UIViewController {
 
         let status = vpn.status
         let stillConnecting = status == .connecting || status == .reasserting
-            || (status == .connected && linkState != 0)
         guard stillConnecting else {
             stopConnectWatchdog()
             return

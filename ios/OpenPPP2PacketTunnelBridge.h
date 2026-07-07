@@ -30,6 +30,8 @@ typedef struct openppp2_ios_tunnel_options
     const char* dns_rules_list;
     const char* root_path;
     int         packet_logging;
+    const char* dns1;
+    const char* dns2;
 } openppp2_ios_tunnel_options;
 
 typedef struct openppp2_ios_tap openppp2_ios_tap;

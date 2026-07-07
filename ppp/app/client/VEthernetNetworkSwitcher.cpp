@@ -674,8 +674,6 @@ ANDROID_DNS_REDIRECT_TRACE(
 #endif
                         return true;
                     }
-#if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_WARN, "openppp2", "dns_redirect udp53 tunnel fallback");
                     {
                         const auto self = std::static_pointer_cast<VEthernetNetworkSwitcher>(
                             shared_from_this());
@@ -687,7 +685,6 @@ ANDROID_DNS_REDIRECT_TRACE(
                             self, exchanger, messages, sourceEP, destEP, ppp::vector<Byte>{});
                     }
                     return true;
-#endif
                 }
 
                 if (block_quic_ && destinationPort == PPP_HTTPS_SYS_PORT) {
@@ -4028,13 +4025,11 @@ ANDROID_DNS_REDIRECT_TRACE( "dns_redirect gateway upstream=%s host=%s",
                             return true;
                         }
 
-#if defined(_ANDROID)
                         serverIP = destinationIP;
-    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect android fallback upstream=%s host=%s",
+#if defined(_ANDROID)
+    ANDROID_DNS_REDIRECT_TRACE( "dns_redirect fallback upstream=%s host=%s",
                             serverIP.to_string().c_str(),
                             qs.mName.c_str());
-#else
-                        return false;
 #endif
                     }
                     else {

@@ -269,6 +269,8 @@ namespace
         ppp::string dns_rules_list;
         ppp::string root_path;
         int         packet_logging = 0;
+        ppp::string dns1;
+        ppp::string dns2;
     };
 
     tunnel_options_snapshot snapshot_options(const openppp2_ios_tunnel_options& options) noexcept
@@ -285,6 +287,8 @@ namespace
         snapshot.dns_rules_list = c_string_or_empty(options.dns_rules_list);
         snapshot.root_path = c_string_or_empty(options.root_path);
         snapshot.packet_logging = options.packet_logging;
+        snapshot.dns1 = c_string_or_empty(options.dns1);
+        snapshot.dns2 = c_string_or_empty(options.dns2);
         return snapshot;
     }
 
@@ -340,6 +344,68 @@ namespace
         ppp::net::asio::vdns::enabled = parsed->udp.dns.turbo;
         configuration = parsed;
         configure_native_telemetry(configuration);
+        return true;
+    }
+
+    bool configure_vdns_servers(
+        const std::shared_ptr<AppConfiguration>& configuration,
+        const ppp::string&                         dns1,
+        const ppp::string&                         dns2) noexcept
+    {
+        if (configuration == nullptr)
+        {
+            return false;
+        }
+
+        ppp::string dns_csv;
+        if (!dns1.empty())
+        {
+            dns_csv = dns1;
+        }
+        if (!dns2.empty())
+        {
+            if (!dns_csv.empty())
+            {
+                dns_csv += ",";
+            }
+            dns_csv += dns2;
+        }
+        if (dns_csv.empty())
+        {
+            native_logf("OpenPPP2 native: tunnel DNS servers are empty");
+            return false;
+        }
+
+        ppp::vector<boost::asio::ip::address> ips;
+        ppp::net::Ipep::ToDnsAddresses(dns_csv, ips);
+        if (ips.empty())
+        {
+            native_logf("OpenPPP2 native: invalid tunnel DNS servers '%s'", dns_csv.c_str());
+            return false;
+        }
+
+        std::shared_ptr<ppp::net::asio::vdns::IPEndPointVector> addresses =
+            ppp::make_shared_object<ppp::net::asio::vdns::IPEndPointVector>();
+        if (addresses == nullptr)
+        {
+            set_last_error("failed to allocate vdns server list");
+            return false;
+        }
+
+        for (const boost::asio::ip::address& ip : ips)
+        {
+            addresses->emplace_back(boost::asio::ip::udp::endpoint(ip, PPP_DNS_SYS_PORT));
+        }
+
+        ppp::net::asio::vdns::enabled = configuration->udp.dns.turbo;
+        ppp::net::asio::vdns::ttl = configuration->udp.dns.ttl;
+        ppp::net::asio::vdns::servers = addresses;
+        ppp::net::asio::vdns::ClearCache();
+        native_logf(
+            "OpenPPP2 native: configured vdns servers=%s turbo=%d ttl=%d",
+            dns_csv.c_str(),
+            configuration->udp.dns.turbo ? 1 : 0,
+            configuration->udp.dns.ttl);
         return true;
     }
 
@@ -549,6 +615,11 @@ namespace
             return false;
         }
 
+        if (!configure_vdns_servers(configuration, options_copy.dns1, options_copy.dns2))
+        {
+            native_logf("OpenPPP2 native: vdns servers not configured; gateway DNS may fail");
+        }
+
         boost::asio::ip::address ip_address;
         boost::asio::ip::address mask_address;
         boost::asio::ip::address gateway_address;
@@ -703,7 +774,7 @@ namespace
                         tap->tap = ios_tap;
                         tap->client = client;
                         tap->context = context;
-                        tap->link_state = map_link_state(client);
+                        tap->link_state = 0;
                     }
 
                     refresh_statistics(tap, statistics_writer, statistics_user_data);
@@ -1008,6 +1079,10 @@ int openppp2_ios_tap_get_link_state(openppp2_ios_tap* tap)
     }
 
     tap->link_state = map_link_state(tap->client);
+    if (tap->start_completed && tap->start_result == 0 && tap->link_state == 5)
+    {
+        tap->link_state = 0;
+    }
     return tap->link_state;
 }
 
