@@ -110,7 +110,21 @@ class PppVpnService : VpnService() {
         isRunning = false
         ensureGeoRulesAssets()
         NativeTelemetryTransport.install(applicationContext)
+        resetNativeSession("onCreate")
         PppLog.write(this, "PppVpnService created (state cleared)")
+    }
+
+    private fun resetNativeSession(reason: String) {
+        try {
+            libopenppp2.stop()
+        } catch (e: Throwable) {
+            PppLog.write(this, "resetNativeSession stop failed ($reason)", e)
+        }
+        try {
+            libopenppp2.clear_configure()
+        } catch (e: Throwable) {
+            PppLog.write(this, "resetNativeSession clear_configure failed ($reason)", e)
+        }
     }
 
     /**
@@ -208,35 +222,16 @@ class PppVpnService : VpnService() {
 
     private fun startVpn(configJson: String, vpnOptionsJson: String) {
         if (isRunning) {
-            // Race: a fresh ACTION_CONNECT arrived while a previous VPN
-            // session is still running or tearing down.
-            //
-            // Do NOT call libopenppp2.stop() from here. Native asio's
-            // timer-cancel path is not safe against a second stop() racing
-            // an in-flight first stop()/startup; doing so SIGSEGVs reliably
-            // inside boost::asio::epoll_reactor::cancel_timer (observed
-            // right after onStarted=0 on device).
-            //
-            // Two sub-cases:
-            //  1) User already pressed Disconnect (currentState==3) -- stop
-            //     is already in flight. Stash the new config; the vpn
-            //     thread's finally block replays it once run() returns.
-            //  2) User hit Connect while an older session is still live
-            //     (no disconnect was requested). We have no safe way to
-            //     swap configs -- just surface an error to the UI so the
-            //     user disconnects first, and drop the request.
+            // A previous session is still live or wedged (common after the UI
+            // process is killed while :vpn keeps running). Queue the new config
+            // and tear down safely; the vpn thread finally block replays it.
+            pendingConfig = configJson
+            pendingVpnOptions = vpnOptionsJson
             if (currentState == 3) {
-                PppLog.write(this, "ACTION_CONNECT while disconnecting -- queued for replay")
-                pendingConfig = configJson
-                pendingVpnOptions = vpnOptionsJson
-            } else if (currentState == 1) {
-                // Benign duplicate while the first session is still starting
-                // (native Open/run can take several seconds). Surfacing an error
-                // here makes the UI drop to disconnected right before onStarted.
-                PppLog.write(this, "ACTION_CONNECT ignored: session still connecting")
+                PppLog.write(this, "ACTION_CONNECT while disconnecting -- restart queued")
             } else {
-                PppLog.write(this, "ACTION_CONNECT ignored: VPN already running; ask user to disconnect first")
-                notifyError("VPN 已在运行，请先断开再切换配置")
+                PppLog.write(this, "ACTION_CONNECT while session active (state=$currentState) -- restart queued")
+                stopVpn()
             }
             return
         }
@@ -293,6 +288,23 @@ class PppVpnService : VpnService() {
                 stopForeground(true)
                 stopSelf()
                 return
+            }
+
+            // Sync VPN DNS servers into native vdns upstream list (gateway DNS path).
+            run {
+                val configRoot = try {
+                    JSONObject(configJson)
+                } catch (_: Throwable) {
+                    JSONObject()
+                }
+                val udpDns = configRoot.optJSONObject("udp")?.optJSONObject("dns")
+                val turbo = udpDns?.optBoolean("turbo", false) ?: false
+                val ttl = (udpDns?.optInt("ttl", 60) ?: 60).coerceAtLeast(1)
+                val dnsBcl = listOf(dns1, dns2).filter { it.isNotBlank() }.joinToString(",")
+                if (dnsBcl.isNotBlank()) {
+                    val dnsBclOk = libopenppp2.set_dns_bcl(turbo, ttl, dnsBcl)
+                    PppLog.write(this, "set_dns_bcl turbo=$turbo ttl=$ttl dns=$dnsBcl ok=$dnsBclOk")
+                }
             }
 
             // Set bypass IP list and DNS rules if provided
@@ -529,7 +541,13 @@ class PppVpnService : VpnService() {
 
     private fun stopVpn() {
         PppLog.write(this, "stopVpn requested, isRunning=$isRunning")
-        if (!isRunning) return
+        if (!isRunning) {
+            resetNativeSession("stopVpn_idle")
+            PppStateStore.set(this, 0)
+            stopLinkStatePoller()
+            currentState = 0
+            return
+        }
 
         notifyStateChanged(3) // disconnecting
         try {

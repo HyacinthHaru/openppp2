@@ -675,7 +675,18 @@ ANDROID_DNS_REDIRECT_TRACE(
                         return true;
                     }
 #if defined(_ANDROID)
-                    __android_log_print(ANDROID_LOG_WARN, "openppp2", "dns_redirect udp53 passthrough");
+                    __android_log_print(ANDROID_LOG_WARN, "openppp2", "dns_redirect udp53 tunnel fallback");
+                    {
+                        const auto self = std::static_pointer_cast<VEthernetNetworkSwitcher>(
+                            shared_from_this());
+                        const boost::asio::ip::udp::endpoint sourceEP =
+                            IPEndPoint::ToEndPoint<boost::asio::ip::udp>(frame->Source);
+                        const boost::asio::ip::udp::endpoint destEP(
+                            Ipep::ToAddress(packet->Destination), PPP_DNS_SYS_PORT);
+                        HandleDnsResolverResponse(
+                            self, exchanger, messages, sourceEP, destEP, ppp::vector<Byte>{});
+                    }
+                    return true;
 #endif
                 }
 
@@ -3620,10 +3631,22 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                 const std::shared_ptr<boost::asio::ip::udp::socket>&        socket,
                 const std::shared_ptr<Byte>&                                buffer,
                 const boost::asio::ip::address&                             serverIP,
+                const std::shared_ptr<VEthernetExchanger>&                  exchanger,
                 const std::shared_ptr<UdpFrame>&                            frame,
                 const std::shared_ptr<ppp::net::packet::BufferSegment>&     messages,
                 const std::shared_ptr<boost::asio::io_context>&             context,
                 const boost::asio::ip::address&                             destinationIP) noexcept {
+
+                const auto self = std::static_pointer_cast<VEthernetNetworkSwitcher>(
+                    shared_from_this());
+                const boost::asio::ip::udp::endpoint sourceEP =
+                    IPEndPoint::ToEndPoint<boost::asio::ip::udp>(frame->Source);
+                const boost::asio::ip::udp::endpoint destinationEP(
+                    destinationIP, frame->Destination.Port);
+                const auto fallback_tunnel = [self, exchanger, messages, sourceEP, destinationEP]() noexcept {
+                    HandleDnsResolverResponse(
+                        self, exchanger, messages, sourceEP, destinationEP, ppp::vector<Byte>{});
+                };
 
                 boost::system::error_code ec;
                 boost::asio::ip::udp::endpoint serverEP(serverIP, frame->Destination.Port);
@@ -3634,6 +3657,7 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                     __android_log_print(ANDROID_LOG_ERROR, "openppp2", "dns_redirect socket_open failed server=%s",
                         serverIP.to_string().c_str());
 #endif
+                    fallback_tunnel();
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::UdpOpenFailed);
                 }
 
@@ -3662,6 +3686,7 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                                 handle,
                                 serverIP.to_string().c_str());
 #endif
+                            fallback_tunnel();
                             return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::TunnelProtectionConfigureFailed);
                         }
 #if defined(_ANDROID)
@@ -3689,6 +3714,7 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                         serverIP.to_string().c_str(),
                         ec.value());
 #endif
+                    fallback_tunnel();
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::UdpSendFailed);
                 }
 #if defined(_ANDROID)
@@ -3701,9 +3727,8 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                 const std::weak_ptr<boost::asio::ip::udp::socket> socket_weak(socket);
                 const std::shared_ptr<ppp::configurations::AppConfiguration> configuration = GetConfiguration();
 
-                const auto self = shared_from_this();
                 const auto cb = make_shared_object<Timer::TimeoutEventHandler>(
-                    [self, socket_weak, handle](Timer*) noexcept {
+                    [socket_weak, handle](Timer*) noexcept {
 #if defined(_ANDROID)
                         __android_log_print(ANDROID_LOG_WARN, "openppp2", "dns_redirect timeout fd=%d", handle);
 #endif
@@ -3726,8 +3751,6 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                 }
 
                 const auto max_buffer_size = PPP_BUFFER_SIZE;
-                boost::asio::ip::udp::endpoint sourceEP = IPEndPoint::ToEndPoint<boost::asio::ip::udp>(frame->Source);
-                boost::asio::ip::udp::endpoint destinationEP(destinationIP, frame->Destination.Port);
 
                 const auto serverEPPtr = make_shared_object<boost::asio::ip::udp::endpoint>();
                 if (NULLPTR == serverEPPtr) {
@@ -3739,9 +3762,9 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::MemoryAllocationFailed);
                 }
 
-                *receive_again = [self, this, socket, timeout, buffer, sourceEP, destinationEP, serverEP, serverEPPtr, messages, max_buffer_size, handle, receive_again]() noexcept {
+                *receive_again = [self, this, socket, timeout, buffer, sourceEP, destinationEP, serverEP, serverEPPtr, messages, exchanger, max_buffer_size, handle, receive_again]() noexcept {
                     socket->async_receive_from(boost::asio::buffer(buffer.get(), max_buffer_size), *serverEPPtr,
-                        [self, this, socket, timeout, buffer, sourceEP, destinationEP, serverEP, serverEPPtr, messages, handle, receive_again](boost::system::error_code ec, size_t sz) noexcept {
+                        [self, this, socket, timeout, buffer, sourceEP, destinationEP, serverEP, serverEPPtr, messages, exchanger, handle, receive_again](boost::system::error_code ec, size_t sz) noexcept {
                             if (ec == boost::system::errc::success && sz > 0) {
                                 bool source_ok = serverEPPtr->address() == serverEP.address() && serverEPPtr->port() == serverEP.port();
                                 bool id_ok = ppp::dns::detail::IsDnsResponseForQuery(messages->Buffer.get(), messages->Length, buffer.get(), sz);
@@ -3757,13 +3780,15 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
 #endif
                                 DatagramOutput(sourceEP, destinationEP, buffer.get(), sz);
                             }
-#if defined(_ANDROID)
                             else {
+#if defined(_ANDROID)
                                 __android_log_print(ANDROID_LOG_WARN, "openppp2", "dns_redirect recv failed fd=%d ec=%d",
                                     handle,
                                     ec.value());
-                            }
 #endif
+                                HandleDnsResolverResponse(
+                                    self, exchanger, messages, sourceEP, destinationEP, ppp::vector<Byte>{});
+                            }
 
                             DeleteTimeout(socket.get());
                             *receive_again = std::function<void()>();
@@ -4098,9 +4123,10 @@ ANDROID_DNS_REDIRECT_TRACE( "dns_redirect temp buffer alloc host=%s ptr=%p",
                 const auto allocator = configuration_->GetBufferAllocator();
 
                 return ppp::coroutines::YieldContext::Spawn(allocator.get(), *context,
-                    [self, this, socket, buffer, frame, messages, packet, context, serverIP, destinationIP](ppp::coroutines::YieldContext& y) noexcept {
+                    [self, this, socket, buffer, frame, messages, packet, context, serverIP, destinationIP, exchanger](ppp::coroutines::YieldContext& y) noexcept {
                         (void)packet; // keep IPFrame alive until coroutine finishes
-                        return RedirectDnsServer(y, socket, buffer, serverIP, frame, messages, context, destinationIP);
+                        return RedirectDnsServer(
+                            y, socket, buffer, serverIP, exchanger, frame, messages, context, destinationIP);
                     });
             }
 

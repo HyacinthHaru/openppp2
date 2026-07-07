@@ -203,6 +203,14 @@ class MainActivity : FlutterActivity() {
     private fun handleConnect(config: String, vpnOptions: String, result: MethodChannel.Result) {
         try {
             PppLog.write(this, "connect requested")
+            val linkFile = java.io.File(filesDir, "openppp2-linkstate.txt")
+            val ageMs = if (!linkFile.exists()) -1L
+                        else System.currentTimeMillis() - linkFile.lastModified()
+            val vpnAlive = linkFile.exists() && ageMs in 0..30_000
+            if (!vpnAlive) {
+                PppStateStore.set(this, 0)
+                PppStateStore.clearLinkState(this)
+            }
             PppStateStore.set(this, 1)
             val vpnIntent = VpnService.prepare(this)
             if (vpnIntent != null) {

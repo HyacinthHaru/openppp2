@@ -1689,7 +1689,13 @@ __LIBOPENPPP2__(jint) Java_supersocksr_ppp_android_c_libopenppp2_run(JNIEnv* env
             auto start = [env, context](const std::shared_ptr<libopenppp2_application>& app) noexcept -> int {
                     std::shared_ptr<VEthernetNetworkSwitcher> ethernet = std::atomic_load(&app->client_);
                     if (NULLPTR != ethernet) {
-                        return LIBOPENPPP2_ERROR_IT_IS_RUNING;
+                        __android_log_print(ANDROID_LOG_WARN, "libopenppp2",
+                            "run() stale client detected, releasing before restart");
+                        app->Release();
+                        ethernet = std::atomic_load(&app->client_);
+                        if (NULLPTR != ethernet) {
+                            return LIBOPENPPP2_ERROR_IT_IS_RUNING;
+                        }
                     }
 
                     int err = libopenppp2_try_open_ethernet_switcher(context, ethernet);
