@@ -60,7 +60,8 @@ static void FingerprintAppendFile(size_t& fingerprint, const ppp::string& path) 
     FingerprintAppendBytes(fingerprint, &length, sizeof(length));
 }
 
-static GeoOutputPaths ResolveGeoOutputPaths(const ppp::configurations::GeoRulesConfiguration& gr) noexcept {
+static GeoOutputPaths ResolveGeoOutputPaths(
+    const ppp::configurations::AppConfiguration::GeoRulesConfiguration& gr) noexcept {
     GeoOutputPaths paths;
     ppp::string output_bypass = gr.output_bypass;
     ppp::string output_dns_rules = gr.output_dns_rules;
