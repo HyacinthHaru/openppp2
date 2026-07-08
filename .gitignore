@@ -124,3 +124,6 @@ android/android/keystore/*.properties
 scripts/deploy/
 build/coverage/
 ios/App/.build/
+
+# Superpowers planning docs (local agent workflow only)
+docs/superpowers/
