@@ -16,3 +16,14 @@ BOOST_AUTO_TEST_CASE(rate_limit_blocks_second_emit_within_window) {
     BOOST_TEST(!limiter.ShouldEmit(key, t0 + 100));
     BOOST_TEST(limiter.ShouldEmit(key, t0 + 1001));
 }
+
+BOOST_AUTO_TEST_CASE(clear_resets_rate_limit_state) {
+    ppp::app::client::QuicRejectRateLimiter limiter;
+    const ppp::string key = "flow-b";
+    const ppp::UInt64 t0 = 5000;
+    BOOST_TEST(limiter.ShouldEmit(key, t0));
+    BOOST_TEST(!limiter.ShouldEmit(key, t0 + 1));
+
+    limiter.Clear();
+    BOOST_TEST(limiter.ShouldEmit(key, t0 + 2));
+}

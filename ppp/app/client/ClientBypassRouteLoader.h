@@ -9,6 +9,28 @@ namespace ppp {
 
             class ClientBypassRouteLoader {
             public:
+                static bool RejectsBypassBeforeTapLookup(const boost::asio::ip::address& ip) noexcept {
+                    if (!ip.is_v4()) {
+                        return true;
+                    }
+
+                    if (ip.is_unspecified()) {
+                        return true;
+                    }
+
+                    if (ip.is_multicast()) {
+                        return true;
+                    }
+
+                    return false;
+                }
+
+#if !defined(_ANDROID) && !defined(_IPHONE)
+                static bool IsRouteListPathEmpty(const ppp::string& path) noexcept {
+                    return path.empty();
+                }
+#endif
+
                 void Bind(VEthernetNetworkSwitcher* owner) noexcept;
 
 #if defined(_ANDROID) || defined(_IPHONE)

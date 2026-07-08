@@ -10,7 +10,7 @@ namespace ppp {
             class ClientConnectionOpener {
             public:
                 void Bind(VEthernetNetworkSwitcher* owner) noexcept;
-                bool Open(const std::shared_ptr<ITap>& tap) noexcept;
+                bool Open(const std::shared_ptr<ppp::tap::ITap>& tap) noexcept;
 
             private:
                 VEthernetNetworkSwitcher* owner_ = nullptr;

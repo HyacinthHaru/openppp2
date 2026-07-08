@@ -32,7 +32,7 @@ namespace ppp {
             }
 
             /** @brief Initializes switcher runtime components and opens all services. */
-            bool ClientConnectionOpener::Open(const std::shared_ptr<ITap>& tap) noexcept {
+            bool ClientConnectionOpener::Open(const std::shared_ptr<ppp::tap::ITap>& tap) noexcept {
                 ppp::telemetry::SpanScope span("client.connect");
                 struct ScopedConnectHistogram final {
                     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();

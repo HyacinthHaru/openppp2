@@ -21,10 +21,6 @@ namespace ppp {
     namespace app {
         namespace client {
 
-            using RibPtr = VEthernetNetworkSwitcher::RouteInformationTablePtr;
-            using RibsPtr = VEthernetNetworkSwitcher::LoadIPListFileVectorPtr;
-            using VbgpPtr = VEthernetNetworkSwitcher::RouteIPListTablePtr;
-
             void ClientBypassRouteLoader::Bind(VEthernetNetworkSwitcher* owner) noexcept {
                 owner_ = owner;
             }
@@ -46,7 +42,7 @@ namespace ppp {
 
                 using File = ppp::io::File;
 
-                if (path.empty()) {
+                if (IsRouteListPathEmpty(path)) {
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::FilePathInvalid);
                 }
 
@@ -82,7 +78,7 @@ namespace ppp {
                     ngw = htonl(gw.to_v4().to_uint());
                 }
 
-                RibsPtr ribs = owner_->ribs_;
+                auto ribs = owner_->ribs_;
                 if (NULLPTR == ribs) {
                     ribs = make_shared_object<VEthernetNetworkSwitcher::LoadIPListFileVector>();
                     owner_->ribs_ = ribs;
@@ -101,7 +97,7 @@ namespace ppp {
                 }
 
                 if (vbgp_url) {
-                    VbgpPtr vbgp = owner_->vbgp_;
+                    auto vbgp = owner_->vbgp_;
                     if (NULLPTR == vbgp) {
                         vbgp = make_shared_object<VEthernetNetworkSwitcher::RouteIPListTable>();
                         if (NULLPTR == vbgp) {
@@ -132,8 +128,8 @@ namespace ppp {
                 if (gw.is_v4()) {
                     boost::asio::ip::address_v4 in = gw.to_v4();
                     if (uint32_t next_hop = htonl(in.to_uint()); !IPEndPoint::IsInvalid(in)) {
-                        if (RibsPtr ribs = std::move(owner_->ribs_); NULLPTR != ribs) {
-                            RibPtr rib = make_shared_object<VEthernetNetworkSwitcher::RouteInformationTable>();
+                        if (auto ribs = std::move(owner_->ribs_); NULLPTR != ribs) {
+                            auto rib = make_shared_object<VEthernetNetworkSwitcher::RouteInformationTable>();
                             if (NULLPTR != rib) {
                                 for (auto&& kv : *ribs) {
                                     const ppp::string& path = kv.first;
@@ -156,15 +152,7 @@ namespace ppp {
 #endif
 
             bool ClientBypassRouteLoader::IsBypassIpAddress(const boost::asio::ip::address& ip) noexcept {
-                if (!ip.is_v4()) {
-                    return false;
-                }
-
-                if (ip.is_unspecified()) {
-                    return false;
-                }
-
-                if (ip.is_multicast()) {
+                if (RejectsBypassBeforeTapLookup(ip)) {
                     return false;
                 }
 
