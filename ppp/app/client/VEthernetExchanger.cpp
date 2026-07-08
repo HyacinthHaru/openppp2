@@ -1,5 +1,4 @@
 #include <ppp/configurations/AppConfiguration.h>
-#include <common/aggligator/aggligator.h>
 #include <ppp/transmissions/proxys/IForwarding.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/VEthernetExchanger.h>
@@ -123,6 +122,7 @@ namespace ppp {
                 buffer_                   = Executors::GetCachedBuffer(context);
                 server_url_.port          = 0;
                 server_url_.protocol_type = ProtocolType::ProtocolType_PPP;
+                static_echo_.Bind(this);
             }
 
             /** @brief Finalizes exchanger on destruction. */
@@ -251,7 +251,7 @@ namespace ppp {
                     break;
                 }
 
-                StaticEchoClean();
+                static_echo_.StaticEchoClean();
                 if (NULLPTR != transmission) {
                     transmission->Dispose();
                 }
@@ -926,10 +926,10 @@ namespace ppp {
                                     RegisterAllMappingPorts();
                                     ppp::telemetry::Log(Level::kInfo, "protocol", "session established role=main");
                                     bool main_run_ok = false;
-                                    if (StaticEchoAllocatedToRemoteExchanger(y) && Run(transmission, y)) {
+                                    if (static_echo_.StaticEchoAllocatedToRemoteExchanger(y) && Run(transmission, y)) {
                                         main_run_ok = true;
                                         run_once = true;
-                                        StaticEchoClean();
+                                        static_echo_.StaticEchoClean();
                                     }
                                     ppp::telemetry::Log(Level::kInfo, "protocol",
                                         "session disposed role=main reason=loop_end ok=%d error=%d",
@@ -1547,7 +1547,7 @@ namespace ppp {
 
                 // If the server does not support static tunneling, clean up the pre-prepared resources.
                 if (remote_port == IPEndPoint::MinPort || session_id == 0) {
-                    StaticEchoClean();
+                    static_echo_.StaticEchoClean();
                 }
                 else {
                     static_echo_session_id_ = session_id;
@@ -2081,448 +2081,38 @@ namespace ppp {
                 return true;
             }
 
-            /** @brief Closes static-echo sockets and resets static-session state. */
-            void VEthernetExchanger::StaticEchoClean() noexcept {
-                for (int i = 0; i < arraysizeof(static_echo_sockets_); i++) {
-                    std::shared_ptr<StaticEchoDatagarmSocket>& r = static_echo_sockets_[i];
-                    std::shared_ptr<StaticEchoDatagarmSocket> socket = std::move(r);
-
-                    Socket::Closesocket(socket);
-                }
-
-                static_echo_input_       = false;
-                static_echo_timeout_     = UINT64_MAX;
-                static_echo_session_id_  = 0;
-                static_echo_remote_port_ = IPEndPoint::MinPort;
-
-                static_echo_protocol_    = NULLPTR;
-                static_echo_transport_   = NULLPTR;
-            }
-
-            /** @brief Returns whether static-echo data path is currently usable. */
             bool VEthernetExchanger::StaticEchoAllocated() noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<StaticEchoDatagarmSocket> socket = static_echo_sockets_[0];
-                if (NULLPTR == socket) {
-                    return false;
-                }
-
-                return socket->is_open() && static_echo_timeout_ != 0 && static_echo_session_id_ != 0 && static_echo_remote_port_ != 0;
+                return static_echo_.StaticEchoAllocated();
             }
 
-            /** @brief Rotates static-echo active socket when keepalive window expires. */
+            bool VEthernetExchanger::StaticEchoAddRemoteEndPoint(boost::asio::ip::udp::endpoint& remoteEP) noexcept {
+                return static_echo_.StaticEchoAddRemoteEndPoint(remoteEP);
+            }
+
+            void VEthernetExchanger::StaticEchoClean() noexcept {
+                static_echo_.StaticEchoClean();
+            }
+
             bool VEthernetExchanger::StaticEchoSwapAsynchronousSocket() noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                if (static_echo_timeout_ != UINT64_MAX && switcher_->StaticMode(NULLPTR)) {
-                    UInt64 now = ppp::threading::Executors::GetTickCount();
-                    if (now >= static_echo_timeout_) {
-                        std::shared_ptr<StaticEchoDatagarmSocket> socket = std::move(static_echo_sockets_[0]);
-                        static_echo_sockets_[0] = std::move(static_echo_sockets_[1]);
-                        static_echo_sockets_[1] = NULLPTR;
-
-                        static_echo_input_ = false;
-                        if (!StaticEchoNextTimeout()) {
-                            return false;
-                        }
-
-                        auto self = shared_from_this();
-                        auto notifiy_if_need =
-                            [self, this]() noexcept {
-                                // Notifies the VPN server of domestic port changes for smoother dynamic switchover of virtual links.
-                                if (!static_echo_input_ && static_echo_sockets_[0]) {
-                                    StaticEchoGatewayServer(STATIC_ECHO_KEEP_ALIVED_ID);
-                                }
-                            };
-
-                        // Here do not close the socket immediately, delay one second, because the data sent by the VPN server may not reach the network card,
-                        // Reduce the packet loss rate during switching and improve the smoothness of the cross.
-                        bool closesocket = true;
-                        std::shared_ptr<boost::asio::io_context> context = GetContext();
-                        if (NULLPTR != context) {
-                            int milliseconds = RandomNext(500, 1000);
-                            std::shared_ptr<Timer> timeout = Timer::Timeout(context, milliseconds,
-                                [socket, notifiy_if_need](Timer*) noexcept {
-                                    notifiy_if_need();
-                                    Socket::Closesocket(socket);
-                                });
-                            if (NULLPTR != timeout) {
-                                closesocket = false;
-                            }
-                        }
-
-                        // Handles whether you can delay closing the socket. If not, close the socket immediately.
-                        if (closesocket) {
-                            Socket::Closesocket(socket);
-                        }
-
-                        notifiy_if_need();
-                        if (NULLPTR == context) {
-                            return false;
-                        }
-
-                        // Re-instance and try to open the Datagram Port.
-                        socket = make_shared_object<StaticEchoDatagarmSocket>(*context);
-                        if (NULLPTR == socket) {
-                            return false;
-                        }
-
-                        auto configuration = GetConfiguration();
-                        auto allocator = configuration->GetBufferAllocator();
-                        static_echo_sockets_[1] = socket;
-
-                        return YieldContext::Spawn(allocator.get(), *context,
-                            [self, this, socket, context](YieldContext& y) noexcept {
-                                bool opened = StaticEchoOpenAsynchronousSocket(*socket, y);
-                                if (opened) {
-                                    StaticEchoLoopbackSocket(socket);
-                                }
-                            });
-                    }
-                }
-
-                return true;
+                return static_echo_.StaticEchoSwapAsynchronousSocket();
             }
 
-            /** @brief Sends static-echo gateway keepalive marker packet. */
             bool VEthernetExchanger::StaticEchoGatewayServer(int ack_id) noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::net::packet::IPFrame> packet = make_shared_object<ppp::net::packet::IPFrame>();
-                if (NULLPTR == packet) {
-                    return false;
-                }
-
-                packet->AddressesFamily = AddressFamily::InterNetwork;
-                packet->Destination     = htonl(ack_id);
-                packet->Id              = ppp::net::packet::IPFrame::NewId();
-                packet->Source          = IPEndPoint::LoopbackAddress;
-                packet->ProtocolType    = ppp::net::native::ip_hdr::IP_PROTO_ICMP;
-                ppp::app::protocol::VirtualEthernetPacket::FillBytesToPayload(packet.get());
-
-                return StaticEchoPacketToRemoteExchanger(packet.get());
+                return static_echo_.StaticEchoGatewayServer(ack_id);
             }
 
-            /** @brief Allocates static-echo sockets and negotiates static mode remotely. */
-            bool VEthernetExchanger::StaticEchoAllocatedToRemoteExchanger(YieldContext& y) noexcept {
-                StaticEchoClean();
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                if (StaticEchoAllocated()) {
-                    return true;
-                }
-
-                std::shared_ptr<boost::asio::io_context> context = GetContext();
-                if (NULLPTR == context) {
-                    return false;
-                }
-
-                bool static_mode = switcher_->StaticMode(NULLPTR);
-                if (!static_mode) {
-                    return true;
-                }
-
-                for (int i = 0; i < arraysizeof(static_echo_sockets_); i++) {
-                    std::shared_ptr<StaticEchoDatagarmSocket>& socket = static_echo_sockets_[i];
-                    if (NULLPTR == socket) {
-                        socket = make_shared_object<StaticEchoDatagarmSocket>(*context);
-                        if (NULLPTR == socket) {
-                            return false;
-                        }
-                    }
-
-                    if (socket->is_open(true)) {
-                        continue;
-                    }
-
-                    bool opened = StaticEchoOpenAsynchronousSocket(*socket, y) && StaticEchoLoopbackSocket(socket);
-                    if (!opened) {
-                        socket.reset();
-                        return false;
-                    }
-                }
-
-                ITransmissionPtr transmission = GetTransmission();
-                if (NULLPTR == transmission) {
-                    return false;
-                }
-
-                return DoStatic(transmission, y);
-            }
-
-            /** @brief Computes next timeout used for static-echo socket rotation. */
-            bool VEthernetExchanger::StaticEchoNextTimeout() noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<StaticEchoDatagarmSocket> socket = static_echo_sockets_[0];
-                if (NULLPTR == socket) {
-                    return false;
-                }
-
-                bool opened = socket->is_open(true);
-                if (!opened) {
-                    return false;
-                }
-
-                AppConfigurationPtr configuration = GetConfiguration();
-                int min = std::max<int>(0, configuration->udp.static_.keep_alived[0]);
-                int max = std::max<int>(0, configuration->udp.static_.keep_alived[1]);
-                if (min == 0) {
-                    min = PPP_UDP_KEEP_ALIVED_MIN_TIMEOUT;
-                }
-
-                if (max == 0) {
-                    max = PPP_UDP_KEEP_ALIVED_MAX_TIMEOUT;
-                }
-
-                if (min > max) {
-                    std::swap(min, max);
-                }
-
-                uint64_t tick = ppp::threading::Executors::GetTickCount();
-                min = std::max<int>(1, min) * 1000;
-                max = std::max<int>(1, max) * 1000;
-
-                if (min == max) {
-                    static_echo_timeout_ = tick + min;
-                }
-                else {
-                    uint64_t next = RandomNext(min, max + 1);
-                    static_echo_timeout_ = tick + next;
-                }
-
-                return true;
-            }
-
-            /** @brief Packs and sends an IP frame over static-echo transport. */
             bool VEthernetExchanger::StaticEchoPacketToRemoteExchanger(const ppp::net::packet::IPFrame* packet) noexcept {
-                if (NULLPTR == packet || packet->AddressesFamily != AddressFamily::InterNetwork) {
-                    return false;
-                }
-
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::configurations::AppConfiguration> configuration = GetConfiguration();
-                if (NULLPTR == configuration) {
-                    return false;
-                }
-
-                int session_id = static_echo_session_id_;
-                if (session_id < 1) {
-                    return false;
-                }
-
-                int message_length = -1;
-                std::shared_ptr<Byte> messages = VirtualEthernetPacket::Pack(configuration,
-                    configuration->GetBufferAllocator(),
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_protocol_; }),
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_transport_; }),
-                    session_id,
-                    packet,
-                    message_length);
-                return StaticEchoPacketToRemoteExchanger(messages, message_length);
+                return static_echo_.StaticEchoPacketToRemoteExchanger(packet);
             }
 
-            /** @brief Packs and sends a UDP frame over static-echo transport. */
             bool VEthernetExchanger::StaticEchoPacketToRemoteExchanger(const std::shared_ptr<ppp::net::packet::UdpFrame>& frame) noexcept {
-                if (NULLPTR == frame || frame->AddressesFamily != AddressFamily::InterNetwork) {
-                    return false;
-                }
-
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::configurations::AppConfiguration> configuration = GetConfiguration();
-                if (NULLPTR == configuration) {
-                    return false;
-                }
-
-                int session_id = static_echo_session_id_;
-                if (session_id < 1) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::net::packet::BufferSegment> payload_buffers = frame->Payload;
-                if (NULLPTR == payload_buffers) {
-                    return false;
-                }
-
-                int packet_length = -1;
-                uint32_t source_ip = frame->Source.GetAddress();
-                uint32_t destination_ip = frame->Destination.GetAddress();
-                std::shared_ptr<Byte> packet = VirtualEthernetPacket::Pack(configuration,
-                    configuration->GetBufferAllocator(),
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_protocol_; }),
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_transport_; }),
-                    session_id,
-                    source_ip,
-                    frame->Source.Port,
-                    destination_ip,
-                    frame->Destination.Port,
-                    payload_buffers->Buffer.get(),
-                    payload_buffers->Length,
-                    packet_length);
-                return StaticEchoPacketToRemoteExchanger(packet, packet_length);
+                return static_echo_.StaticEchoPacketToRemoteExchanger(frame);
             }
 
-            /** @brief Sends a pre-packed static-echo packet to selected remote endpoint. */
             bool VEthernetExchanger::StaticEchoPacketToRemoteExchanger(const std::shared_ptr<Byte>& packet, int packet_length) noexcept {
-                if (NULLPTR == packet || packet_length < 1) {
-                    return false;
-                }
-
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<StaticEchoDatagarmSocket> socket = static_echo_sockets_[0];
-                if (NULLPTR == socket) {
-                    return false;
-                }
-
-                bool opened = socket->is_open();
-                if (!opened) {
-                    return false;
-                }
-
-                boost::asio::ip::udp::endpoint serverEP = StaticEchoGetRemoteEndPoint();
-                if (int serverPort = serverEP.port(); serverPort > IPEndPoint::MinPort && serverPort <= IPEndPoint::MaxPort) {
-                    std::shared_ptr<ppp::transmissions::ITransmissionStatistics> statistics = switcher_->GetStatistics();
-                    boost::asio::post(socket->get_executor(),
-                        [statistics, socket, packet, packet_length, serverEP]() noexcept {
-                            boost::system::error_code ec;
-                            socket->send_to(boost::asio::buffer(packet.get(), packet_length), serverEP,
-                                boost::asio::socket_base::message_end_of_record, ec);
-
-                            if (ec == boost::system::errc::success) {
-                                if (NULLPTR != statistics) {
-                                    statistics->AddOutgoingTraffic(packet_length);
-                                }
-                            }
-                        });
-                    return true;
-                }
-
-                return false;
+                return static_echo_.StaticEchoPacketToRemoteExchanger(packet, packet_length);
             }
 
-            /** @brief Decodes and decrypts incoming static-echo packet. */
-            std::shared_ptr<ppp::app::protocol::VirtualEthernetPacket> VEthernetExchanger::StaticEchoReadPacket(const void* packet, int packet_length) noexcept {
-                if (NULLPTR == packet || packet_length < 1) {
-                    return NULLPTR;
-                }
-
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return NULLPTR;
-                }
-
-                std::shared_ptr<ppp::configurations::AppConfiguration> configuration = GetConfiguration();
-                if (NULLPTR == configuration) {
-                    return NULLPTR;
-                }
-
-                std::shared_ptr<ppp::threading::BufferswapAllocator> allocator = configuration->GetBufferAllocator();
-                return VirtualEthernetPacket::Unpack(configuration,
-                    allocator,
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_protocol_; }),
-                    VirtualEthernetPacket::SessionCiphertext([this](int) noexcept { return static_echo_transport_; }),
-                    packet,
-                    packet_length);
-            }
-
-            /** @brief Injects decoded static-echo packet into local output path. */
-            bool VEthernetExchanger::StaticEchoPacketInput(const std::shared_ptr<ppp::app::protocol::VirtualEthernetPacket>& packet) noexcept {
-                if (NULLPTR == packet || disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::configurations::AppConfiguration> configuration = GetConfiguration();
-                if (NULLPTR == configuration) {
-                    return false;
-                }
-
-                std::shared_ptr<ppp::threading::BufferswapAllocator> allocator = configuration->GetBufferAllocator();
-                static_echo_input_ = true;
-
-                if (packet->Protocol == ppp::net::native::ip_hdr::IP_PROTO_UDP) {
-                    auto tap = switcher_->GetTap();
-                    if (NULLPTR == tap) {
-                        return false;
-                    }
-
-                    std::shared_ptr<ppp::net::packet::UdpFrame> frame = packet->GetUdpPacket();
-                    if (NULLPTR == frame) {
-                        return false;
-                    }
-
-                    std::shared_ptr<ppp::net::packet::IPFrame> ip = frame->ToIp(allocator);
-                    if (NULLPTR == ip) {
-                        return false;
-                    }
-
-                    if (configuration->udp.dns.cache && frame->Source.Port == PPP_DNS_SYS_PORT) {
-                        auto payload = frame->Payload;
-                        if (NULLPTR != payload) {
-                            ppp::net::asio::vdns::AddCache(payload->Buffer.get(), payload->Length);
-                        }
-                    }
-
-                    return switcher_->Output(ip.get());
-                }
-                elif(packet->Protocol == ppp::net::native::ip_hdr::IP_PROTO_IP) {
-                    std::shared_ptr<ppp::net::packet::IPFrame> frame = packet->GetIPPacket(allocator);
-                    if (NULLPTR == frame) {
-                        return false;
-                    }
-
-                    if (frame->ProtocolType == ppp::net::native::ip_hdr::IP_PROTO_ICMP) {
-                        if (frame->Source == IPEndPoint::LoopbackAddress) {
-                            int ack_id = ntohl(frame->Destination);
-                            if (ack_id == 0 || ack_id == STATIC_ECHO_KEEP_ALIVED_ID) {
-                                return false;
-                            }
-
-                            return switcher_->ERORTE(ack_id);
-                        }
-                    }
-
-                    return switcher_->Output(frame.get());
-                }
-                else {
-                    return false;
-                }
-            }
-
-            /** @brief Handles one static-echo receive completion and updates statistics. */
-            int VEthernetExchanger::StaticEchoYieldReceiveForm(Byte* incoming_packet, int incoming_traffic) noexcept {
-                std::shared_ptr<VirtualEthernetPacket> packet = StaticEchoReadPacket(incoming_packet, incoming_traffic);
-                if (NULLPTR != packet) {
-                    StaticEchoPacketInput(packet);
-                }
-
-                auto statistics = switcher_->GetStatistics();
-                if (NULLPTR != statistics) {
-                    statistics->AddIncomingTraffic(incoming_traffic);
-                }
-
-                return incoming_traffic;
-            }
-
-            /** @brief Suspends coroutine for timeout using tracked deadline timer. */
             bool VEthernetExchanger::Sleep(int64_t timeout, const ContextPtr& context, YieldContext& y) noexcept {
                 using atomic_int = std::atomic<int>;
 
@@ -2548,164 +2138,6 @@ namespace ppp {
                 return status->load() > 0;
             }
 
-            /** @brief Starts or continues async receive loop for static-echo socket. */
-            bool VEthernetExchanger::StaticEchoLoopbackSocket(const std::shared_ptr<StaticEchoDatagarmSocket>& socket) noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                bool openped = socket->is_open();
-                if (!openped) {
-                    return false;
-                }
-
-                auto self = shared_from_this();
-                if (std::shared_ptr<ppp::transmissions::ITransmissionQoS> qos = switcher_->GetQoS(); NULLPTR != qos) {
-                    return qos->BeginRead(
-                        [self, this, socket, qos]() noexcept {
-                            socket->async_receive_from(boost::asio::buffer(buffer_.get(), PPP_BUFFER_SIZE), static_echo_source_ep_,
-                                [self, this, qos, socket](const boost::system::error_code& ec, std::size_t sz) noexcept {
-                                    int bytes_transferred = std::max<int>(-1, ec ? -1 : (int)sz);
-                                    if (bytes_transferred > 0) {
-                                        qos->EndRead(StaticEchoYieldReceiveForm(buffer_.get(), bytes_transferred));
-                                    }
-
-                                    StaticEchoLoopbackSocket(socket);
-                                });
-                        });
-                }
-                else {
-                    socket->async_receive_from(boost::asio::buffer(buffer_.get(), PPP_BUFFER_SIZE), static_echo_source_ep_,
-                        [self, this, qos, socket](const boost::system::error_code& ec, std::size_t sz) noexcept {
-                            int bytes_transferred = std::max<int>(-1, ec ? -1 : (int)sz);
-                            if (bytes_transferred > 0) {
-                                StaticEchoYieldReceiveForm(buffer_.get(), bytes_transferred);
-                            }
-
-                            StaticEchoLoopbackSocket(socket);
-                        });
-                    return true;
-                }
-            }
-
-            /** @brief Adds static-echo remote endpoint into balance set/list. */
-            bool VEthernetExchanger::StaticEchoAddRemoteEndPoint(boost::asio::ip::udp::endpoint& remoteEP) noexcept {
-                boost::asio::ip::udp::endpoint destinationEP = Ipep::V4ToV6(remoteEP);
-                boost::asio::ip::address destinationIP = destinationEP.address();
-                if (!destinationIP.is_v6()) {
-                    return false;
-                }
-
-                SynchronizedObjectScope scope(syncobj_);
-                auto r = static_echo_server_ep_set_.emplace(destinationEP);
-                if (!r.second) {
-                    return false;
-                }
-
-                static_echo_server_ep_balances_.emplace_back(destinationEP);
-                return true;
-            }
-
-            /** @brief Chooses remote endpoint for next static-echo transmission. */
-            boost::asio::ip::udp::endpoint VEthernetExchanger::StaticEchoGetRemoteEndPoint() noexcept {
-                std::shared_ptr<aggligator::aggligator> aggligator = switcher_->GetAggligator();
-                if (NULLPTR != aggligator) {
-#if !defined(_ANDROID) && !defined(_IPHONE)
-                    auto ni = switcher_->GetUnderlyingNetworkInterface();
-                    if (NULLPTR != ni) {
-                        boost::asio::ip::udp::endpoint ep = aggligator->client_endpoint(ni->IPAddress);
-                        return Ipep::V4ToV6(ep);
-                    }
-#endif
-                    return aggligator->client_endpoint(boost::asio::ip::address_v6::loopback());
-                }
-
-                boost::asio::ip::udp::endpoint destinationEP;
-                for (SynchronizedObjectScope scope(syncobj_);;) {
-                    auto tail = static_echo_server_ep_balances_.begin();
-                    auto endl = static_echo_server_ep_balances_.end();
-                    if (tail == endl) {
-                        destinationEP = boost::asio::ip::udp::endpoint(server_url_.remoteEP.address(), static_echo_remote_port_);
-                        break;
-                    }
-
-                    std::size_t server_addrsss_num = static_echo_server_ep_set_.size();
-                    if (server_addrsss_num == 1) {
-                        destinationEP = *static_echo_server_ep_balances_.begin();
-                    }
-                    else {
-                        destinationEP = *tail;
-                        static_echo_server_ep_balances_.erase(tail);
-                        static_echo_server_ep_balances_.emplace_back(destinationEP);
-                    }
-
-                    break;
-                }
-
-                return Ipep::V4ToV6(destinationEP);
-            }
-
-            /** @brief Opens and configures static-echo UDP socket for use. */
-            bool VEthernetExchanger::StaticEchoOpenAsynchronousSocket(StaticEchoDatagarmSocket& socket, YieldContext& y) noexcept {
-                if (disposed_.load(std::memory_order_acquire)) {
-                    return false;
-                }
-
-                bool opened = socket.is_open(true);
-                if (opened) {
-                    return true;
-                }
-
-                if (server_url_.port <= IPEndPoint::MinPort || server_url_.port > IPEndPoint::MaxPort) {
-                    return false;
-                }
-
-                AppConfigurationPtr configuration = GetConfiguration();
-                if (NULLPTR == configuration) {
-                    return false;
-                }
-
-                opened = ppp::coroutines::asio::async_open<boost::asio::ip::udp::socket>(y, socket, boost::asio::ip::udp::v6()) && !disposed_.load(std::memory_order_acquire);
-                if (!opened) {
-                    return false;
-                }
-
-                bool ok = false;
-                for (;;) {
-                    opened = Socket::OpenSocket(socket, boost::asio::ip::address_v6::any(), IPEndPoint::MinPort, opened);
-                    if (!opened) {
-                        break;
-                    }
-                    else {
-                        Socket::SetWindowSizeIfNotZero(socket.native_handle(), configuration->udp.cwnd, configuration->udp.rwnd);
-                    }
-
-#if defined(_ANDROID)
-                    std::shared_ptr<aggligator::aggligator> aggligator = switcher_->GetAggligator();
-                    if (NULLPTR == aggligator) {
-                        auto protector_network = switcher_->GetProtectorNetwork();
-                        if (NULLPTR != protector_network) {
-                            opened = protector_network->Protect(socket.native_handle(), y);
-                            if (!opened) {
-                                break;
-                            }
-                        }
-                    }
-#endif
-                    // Mark that the socket has been opened.
-                    socket.opened = opened;
-
-                    // Set the timeout period for closing and re-opening the socket next-timed.
-                    ok = StaticEchoNextTimeout();
-                    break;
-                }
-
-                if (!ok) {
-                    Socket::Closesocket(socket);
-                }
-
-                return ok;
-            }
         }
     }
 }

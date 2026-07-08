@@ -53,6 +53,7 @@
 #include <ppp/threading/Timer.h>
 #include <ppp/auxiliary/UriAuxiliary.h>
 #include <ppp/transmissions/ITcpipTransmission.h>
+#include <ppp/app/client/ExchangerStaticEchoChannel.h>
 
 namespace ppp {
     namespace app {
@@ -90,6 +91,7 @@ namespace ppp {
             class VEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer {
                 friend class                                                            VEthernetDatagramPort;
                 friend class                                                            VEthernetNetworkSwitcher;
+                friend class                                                            ExchangerStaticEchoChannel;
 
             public:
                 /** @brief Shared pointer alias for the parent network switcher. */
@@ -911,20 +913,8 @@ namespace ppp {
                  */
                 bool                                                                    StaticEchoAddRemoteEndPoint(boost::asio::ip::udp::endpoint& remoteEP) noexcept;
 
-                /**
-                 * @brief Selects the next remote endpoint from the static-echo balance pool.
-                 * @return Next endpoint in round-robin order.
-                 */
-                boost::asio::ip::udp::endpoint                                          StaticEchoGetRemoteEndPoint() noexcept;
-
                 /** @brief Clears all static-echo sockets, endpoints, and session state. */
                 void                                                                    StaticEchoClean() noexcept;
-
-                /**
-                 * @brief Computes the next rotation timeout for the static-echo socket pair.
-                 * @return true if the timeout was updated; false if static echo is not active.
-                 */
-                bool                                                                    StaticEchoNextTimeout() noexcept;
 
                 /**
                  * @brief Swaps the active and standby static-echo sockets when the rotation timer fires.
@@ -939,40 +929,6 @@ namespace ppp {
                  * @return true if sent; false on error.
                  */
                 bool                                                                    StaticEchoGatewayServer(int ack_id) noexcept;
-
-                /**
-                 * @brief Processes one received static-echo datagram payload.
-                 *
-                 * @param incoming_packet  Received packet buffer.
-                 * @param incoming_traffic Received packet length in bytes.
-                 * @return Positive on success; 0 or negative on error.
-                 */
-                int                                                                     StaticEchoYieldReceiveForm(Byte* incoming_packet, int incoming_traffic) noexcept;
-
-                /**
-                 * @brief Starts the recursive async-receive loop for a static-echo socket.
-                 *
-                 * @param socket  Active static-echo socket to receive on.
-                 * @return true if the first receive was scheduled; false otherwise.
-                 */
-                bool                                                                    StaticEchoLoopbackSocket(const std::shared_ptr<StaticEchoDatagarmSocket>& socket) noexcept;
-
-                /**
-                 * @brief Opens and configures a static-echo UDP socket.
-                 *
-                 * @param socket  Socket object to open.
-                 * @param y       Coroutine yield context.
-                 * @return true if the socket was bound and ready; false otherwise.
-                 */
-                bool                                                                    StaticEchoOpenAsynchronousSocket(StaticEchoDatagarmSocket& socket, YieldContext& y) noexcept;
-
-                /**
-                 * @brief Allocates the static-echo resources and negotiates channel parameters with the server.
-                 *
-                 * @param y  Coroutine yield context; blocks until negotiation completes or fails.
-                 * @return true if allocation and negotiation succeeded; false otherwise.
-                 */
-                bool                                                                    StaticEchoAllocatedToRemoteExchanger(YieldContext& y) noexcept;
 
                 /**
                  * @brief Sends a pre-packed static-echo packet buffer to the current remote endpoint.
@@ -998,23 +954,6 @@ namespace ppp {
                  * @return true if sent; false on error.
                  */
                 bool                                                                    StaticEchoPacketToRemoteExchanger(const std::shared_ptr<ppp::net::packet::UdpFrame>& frame) noexcept;
-
-                /**
-                 * @brief Injects a received static-echo packet into the main switcher data path.
-                 *
-                 * @param packet  Decoded and decrypted VirtualEthernetPacket.
-                 * @return true if injected; false on error.
-                 */
-                bool                                                                    StaticEchoPacketInput(const std::shared_ptr<ppp::app::protocol::VirtualEthernetPacket>& packet) noexcept;
-
-                /**
-                 * @brief Decodes and decrypts a raw static-echo packet payload.
-                 *
-                 * @param packet         Raw packet buffer.
-                 * @param packet_length  Buffer length in bytes.
-                 * @return Decoded VirtualEthernetPacket; null on decryption or parse failure.
-                 */
-                std::shared_ptr<ppp::app::protocol::VirtualEthernetPacket>              StaticEchoReadPacket(const void* packet, int packet_length) noexcept;
 
             private:
                 /**
@@ -1142,6 +1081,8 @@ namespace ppp {
                 int                                                                     static_echo_session_id_  = 0;
                 /** @brief UDP port on the server used for static-echo traffic. */
                 int                                                                     static_echo_remote_port_ = 0;
+                /** @brief Static-echo UDP channel extracted from exchanger core. */
+                ExchangerStaticEchoChannel                                              static_echo_;
 
 #if defined(_IPHONE)
                 /** @brief Active per-flow server transmissions when mux is disabled. */
