@@ -21,7 +21,6 @@ typedef ppp::net::IPEndPoint                                        IPEndPoint;
 typedef ppp::net::Ipep                                              Ipep;
 typedef ppp::threading::Timer                                       Timer;
 typedef ppp::threading::Executors                                   Executors;
-typedef ppp::transmissions::ITransmission                           ITransmission;
 typedef ppp::transmissions::ITransmissionPtr                        ITransmissionPtr;
 typedef ppp::configurations::AppConfigurationPtr                    AppConfigurationPtr;
 typedef VEthernetExchanger::StaticEchoDatagarmSocket                StaticEchoDatagarmSocket;

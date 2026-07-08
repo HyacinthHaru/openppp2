@@ -1,11 +1,7 @@
 #include <ppp/app/client/RouteTableManager.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/VEthernetExchanger.h>
-#include <ppp/app/client/dns/DnsInterceptor.h>
-#include <ppp/collections/Dictionary.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
-#include <ppp/net/IPEndPoint.h>
 
 #include <chrono>
 
@@ -16,7 +12,6 @@
 #include <common/unix/UnixAfx.h>
 #endif
 
-using ppp::net::IPEndPoint;
 using ppp::telemetry::Level;
 
 namespace ppp {
