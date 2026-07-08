@@ -9,6 +9,9 @@
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/diagnostics/Error.h>
+#if defined(_WIN32)
+#include <windows/ppp/app/client/lsp/PaperAirplaneController.h>
+#endif
 
 namespace ppp::app {
 

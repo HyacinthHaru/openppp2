@@ -92,6 +92,7 @@ namespace ppp {
                 friend class                                                            VEthernetDatagramPort;
                 friend class                                                            VEthernetNetworkSwitcher;
                 friend class                                                            ExchangerStaticEchoChannel;
+                friend class                                                            ClientPacketDispatchHandler;
 
             public:
                 /** @brief Shared pointer alias for the parent network switcher. */

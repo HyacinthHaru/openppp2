@@ -38,7 +38,7 @@ namespace ppp {
 
 #if !defined(_ANDROID) && !defined(_IPHONE)
                 // Windows platform needs to set the prdr synchronization lock state to prevent the problem of multi-thread concurrent competition.
-                SynchronizedObjectScope scope(owner_->prdr_);
+                ppp::ethernet::VEthernet::SynchronizedObjectScope scope(owner_->prdr_);
 #endif
 
                 // Clear event bindings.

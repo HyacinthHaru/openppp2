@@ -12,11 +12,15 @@
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/proxys/VEthernetLocalProxySwitcher.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
+#include <ppp/app/server/VirtualEthernetManagedServer.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/LinkTelemetry.h>
 #include <ppp/diagnostics/Telemetry.h>
 #include <cstdio>
+#if defined(_WIN32)
+#include <windows/ppp/app/client/lsp/PaperAirplaneController.h>
+#endif
 
 namespace ppp::app {
 

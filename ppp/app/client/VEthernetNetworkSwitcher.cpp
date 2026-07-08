@@ -16,6 +16,7 @@
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/ipv6/IPv6Packet.h>
 
 #include <ppp/threading/Timer.h>
 #include <ppp/threading/Executors.h>

@@ -8,6 +8,7 @@
 #include <ppp/transmissions/ITransmissionQoS.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/diagnostics/Telemetry.h>
 #include <ppp/IDisposable.h>
 #include <ppp/net/asio/vdns.h>
 #include <ppp/net/IPEndPoint.h>
@@ -194,7 +195,7 @@ namespace ppp {
 
                 // Attempt to load the routing table configuration if the routing table is configured correctly.
                 if (VEthernetNetworkSwitcher::RouteInformationTablePtr rib = owner_->rib_; NULLPTR != rib) {
-                    VEthernetNetworkSwitcher::ForwardInformationTablePtr fib = make_shared_object<ForwardInformationTable>();
+                    VEthernetNetworkSwitcher::ForwardInformationTablePtr fib = make_shared_object<VEthernetNetworkSwitcher::ForwardInformationTable>();
                     if (NULLPTR != fib) {
                         fib->Fill(*rib);
 

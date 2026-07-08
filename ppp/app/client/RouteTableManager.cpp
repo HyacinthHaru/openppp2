@@ -2,6 +2,7 @@
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/diagnostics/Telemetry.h>
 
 #include <chrono>
 

@@ -1,4 +1,5 @@
 #include <ppp/app/ApplicationClientBootstrap.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/GeoRuleGenerator.h>

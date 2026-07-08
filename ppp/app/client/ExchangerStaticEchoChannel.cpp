@@ -21,9 +21,10 @@ typedef ppp::net::IPEndPoint                                        IPEndPoint;
 typedef ppp::net::Ipep                                              Ipep;
 typedef ppp::threading::Timer                                       Timer;
 typedef ppp::threading::Executors                                   Executors;
-typedef ppp::transmissions::ITransmissionPtr                        ITransmissionPtr;
-typedef ppp::configurations::AppConfigurationPtr                    AppConfigurationPtr;
+typedef VEthernetExchanger::ITransmissionPtr                        ITransmissionPtr;
+typedef VEthernetExchanger::AppConfigurationPtr                    AppConfigurationPtr;
 typedef VEthernetExchanger::StaticEchoDatagarmSocket                StaticEchoDatagarmSocket;
+typedef VEthernetExchanger::YieldContext                            YieldContext;
 
 namespace ppp {
     namespace app {

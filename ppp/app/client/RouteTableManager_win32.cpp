@@ -4,6 +4,7 @@
 #include <ppp/app/client/dns/DnsInterceptor.h>
 #include <ppp/collections/Dictionary.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/diagnostics/Telemetry.h>
 #include <ppp/net/IPEndPoint.h>
 
 #if defined(_WIN32)

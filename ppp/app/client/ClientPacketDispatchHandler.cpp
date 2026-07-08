@@ -6,6 +6,7 @@
 #include <ppp/collections/Dictionary.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/tap/ITap.h>
 #include <ppp/net/packet/UdpFrame.h>
 #include <ppp/net/packet/IcmpFrame.h>
 #include <ppp/net/native/ip.h>
@@ -74,7 +75,7 @@ namespace ppp {
                     return false;
                 }
 
-                std::shared_ptr<ITap> tap = owner_->GetTap();
+                std::shared_ptr<ppp::tap::ITap> tap = owner_->GetTap();
                 if (NULLPTR == tap) {
                     return false;
                 }
@@ -177,7 +178,7 @@ namespace ppp {
             }
 
             /** @brief Emits ICMP Port Unreachable so QUIC clients quickly fall back to TCP. */
-            bool ClientPacketDispatchHandler::RejectBlockedQuic(const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<UdpFrame>& frame) noexcept {
+            bool ClientPacketDispatchHandler::RejectBlockedQuic(const std::shared_ptr<ppp::net::packet::IPFrame>& packet, const std::shared_ptr<ppp::net::packet::UdpFrame>& frame) noexcept {
                 if (NULLPTR == packet || NULLPTR == frame) {
                     return false;
                 }
@@ -185,7 +186,7 @@ namespace ppp {
                 UInt64 now = Executors::GetTickCount();
                 ppp::string key = owner_->quic_reject_limiter_.BuildKey(packet, frame);
                 if (!key.empty()) {
-                    SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
+                    ppp::ethernet::VEthernet::SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
                     if (!owner_->quic_reject_limiter_.ShouldEmit(key, now)) {
                         return true;
                     }
@@ -346,7 +347,7 @@ ANDROID_DNS_REDIRECT_TRACE(
             bool ClientPacketDispatchHandler::ERORTE(int ack_id) noexcept {
                 std::shared_ptr<IPFrame> packet;
                 if (ack_id != 0) {
-                    SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
+                    ppp::ethernet::VEthernet::SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
                     bool ok = Dictionary::RemoveValueByKey(owner_->icmppackets_, ack_id, packet,
                         [](VEthernetNetworkSwitcher::VEthernetIcmpPacket& value) noexcept {
                             return value.packet;
@@ -360,7 +361,7 @@ ANDROID_DNS_REDIRECT_TRACE(
                     return false;
                 }
 
-                std::shared_ptr<ITap> tap = owner_->GetTap();
+                std::shared_ptr<ppp::tap::ITap> tap = owner_->GetTap();
                 if (NULLPTR == tap) {
                     return false;
                 }
@@ -387,7 +388,7 @@ ANDROID_DNS_REDIRECT_TRACE(
                     return false;
                 }
 
-                std::shared_ptr<ITap> tap = owner_->GetTap();
+                std::shared_ptr<ppp::tap::ITap> tap = owner_->GetTap();
                 if (NULLPTR == tap) {
                     return false;
                 }
@@ -498,7 +499,7 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
 
                 int ack_id = 0;
                 /** @brief Allocates a unique ACK ID and stores packet until callback/timeout. */
-                for (SynchronizedObjectScope scope(owner_->GetSynchronizedObject());;) {
+                for (ppp::ethernet::VEthernet::SynchronizedObjectScope scope(owner_->GetSynchronizedObject());;) {
                     if (owner_->IsDisposed()) {
                         return false;
                     }
@@ -557,7 +558,7 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                     return true;
                 }
                 else {
-                    SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
+                    ppp::ethernet::VEthernet::SynchronizedObjectScope scope(owner_->GetSynchronizedObject());
                     ppp::collections::Dictionary::TryRemove(owner_->icmppackets_, ack_id);
                     return false;
                 }

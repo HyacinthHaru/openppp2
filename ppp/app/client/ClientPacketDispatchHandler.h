@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ppp/net/packet/IPFrame.h>
+#include <ppp/net/packet/UdpFrame.h>
+#include <ppp/net/packet/IcmpFrame.h>
 #include <memory>
 
 namespace ppp::net::native { struct ip_hdr; }

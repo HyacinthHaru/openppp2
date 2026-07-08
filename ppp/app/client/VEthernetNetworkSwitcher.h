@@ -23,6 +23,7 @@ namespace ppp::net { class ProtectorNetwork; }
 #include <ppp/ethernet/VEthernet.h>
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
 #include <ppp/app/client/ClientNetworkInterface.h>
+#include <ppp/net/native/rib.h>
 #include <ppp/app/client/RouteTableManager.h>
 #include <ppp/app/client/AssignedAddressManager.h>
 #include <ppp/app/client/ClientConnectionTeardown.h>
@@ -30,7 +31,6 @@ namespace ppp::net { class ProtectorNetwork; }
 #include <ppp/app/client/ClientPacketDispatchHandler.h>
 #include <ppp/app/client/ClientBypassRouteLoader.h>
 #include <ppp/app/client/QuicRejectRateLimiter.h>
-#include <ppp/net/native/rib.h>
 
 #if defined(_WIN32)
 struct _MIB_IPFORWARDROW;
@@ -136,7 +136,11 @@ namespace ppp {
                 std::shared_ptr<VEthernetExchanger>                                 GetExchanger()               noexcept { return exchanger_; }
                 void                                                                RequestedIPv6(const ppp::string& value) noexcept { requested_ipv6_ = value; }
                 ppp::string                                                         RequestedIPv6() noexcept { return requested_ipv6_; }
+#if !defined(_ANDROID) && !defined(_IPHONE)
                 boost::asio::ip::address                                            LastAssignedIPv6() noexcept { return address_manager_.LastAssignedIPv6(); }
+#else
+                boost::asio::ip::address                                            LastAssignedIPv6() noexcept { return {}; }
+#endif
                 std::shared_ptr<ppp::transmissions::ITransmissionQoS>               GetQoS()                     noexcept { return qos_; }
                 std::shared_ptr<ppp::transmissions::ITransmissionStatistics>          GetStatistics()              noexcept { return statistics_; }
                 std::shared_ptr<VirtualEthernetInformation>                         GetInformation()             noexcept;

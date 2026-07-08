@@ -1,4 +1,5 @@
 #include <ppp/app/client/ClientNetworkInterfaceResolver.h>
+#include <ppp/tap/ITap.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/net/Ipep.h>
 
