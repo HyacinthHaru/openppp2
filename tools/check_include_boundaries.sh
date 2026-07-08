@@ -10,6 +10,12 @@ if rg -n '#include <ppp/app/server/' ppp/app/client/ -g'*.{h,cpp}' 2>/dev/null; 
   violations=$((violations + 1))
 fi
 
+# application internal hub must not pull client+server switcher headers
+if rg -n '#include <ppp/app/(client/VEthernetNetworkSwitcher|server/VirtualEthernetSwitcher)\.h>' ppp/app/PppApplicationInternal.h 2>/dev/null; then
+  echo "FAIL: PppApplicationInternal includes switcher headers"
+  violations=$((violations + 1))
+fi
+
 # facade/views must not pull heavy deps (skip if directory missing)
 if [[ -d ppp/facade/views ]]; then
   if rg -n 'configurations/AppConfiguration|json/json' ppp/facade/views/ -g'*.h' 2>/dev/null; then

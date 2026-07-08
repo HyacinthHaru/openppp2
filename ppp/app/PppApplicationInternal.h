@@ -22,12 +22,7 @@
 #include <ppp/threading/Thread.h>
 #include <ppp/threading/Executors.h>
 #include <ppp/threading/BufferswapAllocator.h>
-#include <ppp/app/server/VirtualEthernetSwitcher.h>
-#include <ppp/app/server/VirtualEthernetManagedServer.h>
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
-#include <ppp/app/client/VEthernetExchanger.h>
-#include <ppp/app/client/VEthernetNetworkSwitcher.h>
-#include <ppp/app/client/proxys/VEthernetLocalProxySwitcher.h>
 
 #if defined(_WIN32)
 #include <windows/ppp/net/proxies/HttpProxy.h>
@@ -67,6 +62,20 @@ namespace ppp {
 namespace configurations {
 class AppConfiguration;
 }
+namespace app {
+namespace client {
+class VEthernetExchanger;
+class VEthernetNetworkSwitcher;
+namespace proxys {
+class VEthernetHttpProxySwitcher;
+class VEthernetLocalProxySwitcher;
+class VEthernetSocksProxySwitcher;
+}
+}
+namespace server {
+class VirtualEthernetSwitcher;
+}
+}
 }
 
 namespace ppp::app {
@@ -83,12 +92,6 @@ using ppp::net::Socket;
 using ppp::io::File;
 using ppp::io::FileAccess;
 using ppp::auxiliary::StringAuxiliary;
-using ppp::app::server::VirtualEthernetSwitcher;
-using ppp::app::client::VEthernetNetworkSwitcher;
-using ppp::app::client::VEthernetExchanger;
-using ppp::app::client::proxys::VEthernetLocalProxySwitcher;
-using ppp::app::client::proxys::VEthernetHttpProxySwitcher;
-using ppp::app::client::proxys::VEthernetSocksProxySwitcher;
 using ppp::Int128;
 
 #if !defined(_WIN32) && !defined(_ANDROID) && !defined(_IPHONE)

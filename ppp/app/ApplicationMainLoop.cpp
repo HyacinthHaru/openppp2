@@ -8,6 +8,10 @@
 #include <ppp/transmissions/proxys/IForwarding.h>
 #include <ppp/app/client/proxys/VEthernetHttpProxySwitcher.h>
 #include <ppp/app/client/proxys/VEthernetSocksProxySwitcher.h>
+#include <ppp/app/client/VEthernetExchanger.h>
+#include <ppp/app/client/VEthernetNetworkSwitcher.h>
+#include <ppp/app/client/proxys/VEthernetLocalProxySwitcher.h>
+#include <ppp/app/server/VirtualEthernetSwitcher.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/LinkTelemetry.h>
@@ -15,6 +19,11 @@
 #include <cstdio>
 
 namespace ppp::app {
+
+using client::VEthernetExchanger;
+using client::VEthernetNetworkSwitcher;
+using client::proxys::VEthernetLocalProxySwitcher;
+using server::VirtualEthernetSwitcher;
 
 /**
  * @brief Appends one formatted line with aligned key column to environment output.
