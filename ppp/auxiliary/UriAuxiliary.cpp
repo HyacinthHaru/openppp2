@@ -5,7 +5,7 @@
 #include <ppp/auxiliary/UriAuxiliary.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/coroutines/asio/asio.h>

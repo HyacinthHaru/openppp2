@@ -6,7 +6,7 @@
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/ssl/SSL.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>

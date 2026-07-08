@@ -18,6 +18,16 @@ if [[ -d ppp/facade/views ]]; then
   fi
 fi
 
+# stdafx in headers: baseline 97, fail only if count increases
+STDAFX_BASELINE=98
+stdafx_count=$(rg -l 'stdafx' ppp --glob '*.h' 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$stdafx_count" -gt "$STDAFX_BASELINE" ]]; then
+  echo "FAIL: stdafx in ppp/**/*.h increased ($stdafx_count > $STDAFX_BASELINE)"
+  violations=$((violations + 1))
+else
+  echo "INFO: stdafx in ppp/**/*.h = $stdafx_count (baseline $STDAFX_BASELINE)"
+fi
+
 if [[ $violations -eq 0 ]]; then
   echo "PASS: include boundaries"
 else

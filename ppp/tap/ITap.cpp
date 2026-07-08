@@ -12,7 +12,7 @@
 #include <ppp/stdafx.h>
 #include <ppp/tap/ITap.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #if defined(_WIN32)
 #include <windows/ppp/tap/TapWindows.h>

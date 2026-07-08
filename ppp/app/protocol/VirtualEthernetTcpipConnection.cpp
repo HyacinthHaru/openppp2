@@ -4,7 +4,7 @@
 #include <ppp/net/Ipep.h>
 #include <ppp/net/Socket.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #include <deque>
 #include <vector>

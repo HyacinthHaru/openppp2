@@ -1,7 +1,7 @@
 #include <ppp/tap/TapStub.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 namespace ppp {
     namespace tap {

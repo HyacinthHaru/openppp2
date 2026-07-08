@@ -48,6 +48,7 @@ namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
 #include <ppp/app/client/dns/Rule.h>
 #include <ppp/app/client/dns/DnsInterceptor.h>
+#include <ppp/app/client/RouteTableManager.h>
 #include <ppp/app/client/proxys/VEthernetHttpProxySwitcher.h>
 #include <ppp/app/client/proxys/VEthernetSocksProxySwitcher.h>
 
@@ -105,6 +106,7 @@ namespace ppp {
                 friend class                                                        VEthernetDatagramPort;
                 friend class                                                        dns::DnsResponseHandler;
                 friend class                                                        dns::DnsUdpRelay;
+                friend class                                                        RouteTableManager;
 
             private:
                 /**
@@ -699,20 +701,6 @@ namespace ppp {
                 boost::asio::ip::address                                            RewriteFakeIpAddress(const boost::asio::ip::address& addr) const noexcept;
 
             protected:
-#if !defined(_ANDROID) && !defined(_IPHONE)
-                /**
-                 * @brief Installs VPN-specific routes into the host OS routing table.
-                 * @note Desktop platforms only. Not called on Android/iOS.
-                 */
-                virtual void                                                        AddRoute() noexcept;
-
-                /**
-                 * @brief Removes VPN-specific routes from the host OS routing table.
-                 * @note Desktop platforms only. Called during Dispose().
-                 */
-                virtual void                                                        DeleteRoute() noexcept;
-#endif
-
                 /**
                  * @brief Handles a UDP frame that arrived from the TAP device.
                  *
@@ -740,10 +728,10 @@ namespace ppp {
                 bool                                                                FixUnderlyingNgw() noexcept;
 
                 /**
-                 * @brief Deletes all OS default routes that conflict with the VPN gateway.
-                 * @return true if routes were cleaned up; false on error.
+                 * @brief Removes VPN routes and restores peer-prefix/OS defaults on teardown.
+                 * @note Desktop platforms only. Called during Dispose().
                  */
-                bool                                                                DeleteAllDefaultRoute() noexcept;
+                void                                                                DeleteRoute() noexcept;
 #else
                 /**
                  * @brief Builds the mobile platform bypass/VPN route table from the TAP interface.
@@ -813,7 +801,11 @@ namespace ppp {
                 bool                                                                DeleteTimeout(void* k) noexcept;
 
                 /** @brief Applies deferred hosted-network routes once the remote session is established. */
-                bool                                                                TryApplyHostedNetworkRoutes() noexcept;
+#if !defined(_ANDROID) && !defined(_IPHONE)
+                bool                                                                TryApplyHostedNetworkRoutes() noexcept { return route_table_.TryApplyHostedNetworkRoutes(); }
+#else
+                bool                                                                TryApplyHostedNetworkRoutes() noexcept { return true; }
+#endif
 
             private:
                 /** @brief Releases all managed runtime objects in safe order. */
@@ -832,56 +824,6 @@ namespace ppp {
                  */
                 bool                                                                UsePaperAirplaneController() noexcept;
 #endif
-                /**
-                 * @brief Adds OS route entries for configured DNS server exception addresses.
-                 * @note Ensures DNS server packets bypass the VPN tunnel.
-                 */
-                void                                                                AddRouteWithDnsServers() noexcept;
-
-                /**
-                 * @brief Removes OS route entries for DNS server exception addresses.
-                 */
-                void                                                                DeleteRouteWithDnsServers() noexcept;
-
-                /**
-                 * @brief Adds one host route into the OS routing table.
-                 *
-                 * @param ip     Destination IP address (host byte order).
-                 * @param gw     Gateway IP address (host byte order).
-                 * @param prefix Prefix length (0-32).
-                 * @return true if the route was added; false on OS error.
-                 */
-                bool                                                                AddRoute(uint32_t ip, uint32_t gw, int prefix) noexcept;
-
-#if defined(_WIN32)
-                /**
-                 * @brief Deletes one host route from a Windows MIB_IPFORWARDTABLE snapshot.
-                 *
-                 * @param mib    Pre-fetched forward table snapshot.
-                 * @param ip     Destination IP.
-                 * @param gw     Gateway IP.
-                 * @param prefix Prefix length.
-                 * @return true if the route was removed; false otherwise.
-                 */
-                bool                                                                DeleteRoute(const std::shared_ptr<MIB_IPFORWARDTABLE>& mib, uint32_t ip, uint32_t gw, int prefix) noexcept;
-#else
-                /**
-                 * @brief Deletes one host route from the Unix routing table.
-                 *
-                 * @param ip     Destination IP.
-                 * @param gw     Gateway IP.
-                 * @param prefix Prefix length.
-                 * @return true if removed; false on error.
-                 */
-                bool                                                                DeleteRoute(uint32_t ip, uint32_t gw, int prefix) noexcept;
-#endif
-
-                /**
-                 * @brief Starts the default-route guard worker to detect and repair route loss.
-                 * @return true if the guard was started; false on error.
-                 */
-                bool                                                                ProtectDefaultRoute() noexcept;
-
                 /**
                  * @brief Downloads and loads all configured IP-list files into the RIB.
                  *
@@ -1156,6 +1098,8 @@ namespace ppp {
                 RouteInformationTablePtr                                            default_routes_;
 #endif
 #endif
+                /** @brief OS route table add/delete operations (PR2a-1). */
+                RouteTableManager                                                   route_table_;
             };
         }
     }

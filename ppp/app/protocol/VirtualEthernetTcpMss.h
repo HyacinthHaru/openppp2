@@ -9,7 +9,7 @@
 #include <ppp/net/native/ip.h>
 #include <ppp/net/native/tcp.h>
 #include <ppp/net/native/checksum.h>
-#include <ppp/app/server/VirtualEthernetIPv6.h>
+#include <ppp/app/protocol/VirtualEthernetIPv6.h>
 #include <ppp/ipv6/IPv6Packet.h>
 
 namespace ppp {
@@ -147,14 +147,14 @@ namespace ppp {
                     return false;
                 }
 
-                ppp::app::server::VirtualEthernetIPv6MinimalHeader* ipv6 = reinterpret_cast<ppp::app::server::VirtualEthernetIPv6MinimalHeader*>(packet);
+                ppp::app::protocol::VirtualEthernetIPv6MinimalHeader* ipv6 = reinterpret_cast<ppp::app::protocol::VirtualEthernetIPv6MinimalHeader*>(packet);
                 if ((ipv6->VersionTrafficClass >> 4) != 6 || ipv6->NextHeader != IPPROTO_TCP) {
                     return false;
                 }
 
                 boost::asio::ip::address_v6 source;
                 boost::asio::ip::address_v6 destination;
-                if (!ppp::app::server::ParseVirtualEthernetIPv6Header(packet, packet_length, source, destination)) {
+                if (!ppp::app::protocol::ParseVirtualEthernetIPv6Header(packet, packet_length, source, destination)) {
                     return false;
                 }
 
@@ -213,7 +213,7 @@ namespace ppp {
                 }
 
                 tcphdr->chksum = 0;
-                tcphdr->chksum = ppp::app::server::VirtualEthernetIPv6PseudoChecksum(reinterpret_cast<unsigned char*>(tcphdr), tcp_length, source, destination, IPPROTO_TCP);
+                tcphdr->chksum = ppp::app::protocol::VirtualEthernetIPv6PseudoChecksum(reinterpret_cast<unsigned char*>(tcphdr), tcp_length, source, destination, IPPROTO_TCP);
                 return true;
             }
         }

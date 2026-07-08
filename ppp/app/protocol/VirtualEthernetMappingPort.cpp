@@ -19,7 +19,7 @@
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/configurations/AppConfiguration.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 namespace ppp {
     namespace app {

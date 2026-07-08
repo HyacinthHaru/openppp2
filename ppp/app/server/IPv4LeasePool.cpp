@@ -1,5 +1,5 @@
 #include <ppp/app/server/IPv4LeasePool.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #include <cstring>
 

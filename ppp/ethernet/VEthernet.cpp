@@ -1,6 +1,6 @@
 #include <ppp/ethernet/VEthernet.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 /**
  * @file VEthernet.cpp
  * @brief Implements TAP-facing virtual Ethernet packet dispatch and timers.

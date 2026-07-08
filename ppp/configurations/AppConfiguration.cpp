@@ -18,7 +18,7 @@
 #include <ppp/auxiliary/JsonAuxiliary.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #include <openssl/evp.h>  /* EVP_get_cipherbyname, EVP_CIPHER_key_length - used for legacy cipher detection */
 

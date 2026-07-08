@@ -175,6 +175,8 @@ namespace ppp {
                 , dns_interceptor_(std::make_unique<dns::DnsInterceptor>())
                 , icmppackets_aid_(0) {
 
+                route_table_.Bind(this);
+
 #if !defined(_ANDROID) && !defined(_IPHONE)
                 route_added_     = false;
 #if defined(_LINUX)
@@ -1330,10 +1332,10 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                 for (const auto& route : applied_peer_prefix_routes_) {
 #if defined(_WIN32)
                     if (NULLPTR != mib) {
-                        DeleteRoute(mib, route.Destination, route.NextHop, route.Prefix);
+                        route_table_.DeleteRoute(mib, route.Destination, route.NextHop, route.Prefix);
                     }
 #elif !defined(_ANDROID) && !defined(_IPHONE)
-                    DeleteRoute(route.Destination, route.NextHop, route.Prefix);
+                    route_table_.DeleteRoute(route.Destination, route.NextHop, route.Prefix);
 #endif
                 }
                 applied_peer_prefix_routes_.clear();
@@ -1388,7 +1390,7 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                     }
 
 #if !defined(_ANDROID) && !defined(_IPHONE)
-                    if (!AddRoute(network, via, route.prefix)) {
+                    if (!route_table_.AddRoute(network, via, route.prefix)) {
                         return false;
                     }
 #endif
@@ -1396,10 +1398,10 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                     if (!rib->AddRoute(network, route.prefix, via)) {
 #if defined(_WIN32)
                         if (auto mib = ppp::win32::network::Router::GetIpForwardTable(); NULLPTR != mib) {
-                            DeleteRoute(mib, network, via, route.prefix);
+                            route_table_.DeleteRoute(mib, network, via, route.prefix);
                         }
 #elif !defined(_ANDROID) && !defined(_IPHONE)
-                        DeleteRoute(network, via, route.prefix);
+                        route_table_.DeleteRoute(network, via, route.prefix);
 #endif
                         return false;
                     }
@@ -1694,32 +1696,6 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                 }
             };
 
-#if defined(_LINUX)
-            static ppp::function<ppp::string(ppp::net::native::RouteEntry&)> Linux_GetNetworkInterfaceName(
-                const std::shared_ptr<ppp::tap::ITap>&                              tap_if,
-                const std::shared_ptr<VEthernetNetworkSwitcher::NetworkInterface>&  tap_ni,
-                const std::shared_ptr<VEthernetNetworkSwitcher::NetworkInterface>&  underlying_ni,
-                ppp::unordered_map<uint32_t, ppp::string>&                          nics) noexcept {
-
-                auto f =
-                    [tap_if, tap_ni, underlying_ni, &nics](ppp::net::native::RouteEntry& entry) noexcept {
-                        if (entry.NextHop == tap_if->GatewayServer) {
-                            return tap_ni->Name;
-                        }
-
-                        ppp::string nic;
-                        if (Dictionary::TryGetValue(nics, entry.NextHop, nic)) {
-                            if (!nic.empty()) {
-                                return nic;
-                            }
-                        }
-
-                        return underlying_ni->Name;
-                    };
-                return f;
-            }
-#endif
-
             /** @brief Gets Unix TAP/TUN-side network-interface snapshot. */
             static std::shared_ptr<VEthernetNetworkSwitcher::NetworkInterface> Unix_GetTapNetworkInterface(const std::shared_ptr<VEthernetNetworkSwitcher::ITap>& tap) noexcept {
                 int interface_index = tap->GetInterfaceIndex();
@@ -1886,64 +1862,10 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
 #if defined(_ANDROID) || defined(_IPHONE)
             /** @brief Builds mobile-side route table including bypass and DNS exceptions. */
             bool VEthernetNetworkSwitcher::AddAllRoute(const std::shared_ptr<ITap>& tap) noexcept {
-                RouteInformationTablePtr rib = make_shared_object<RouteInformationTable>();
-                if (NULLPTR == rib)  {
+                if (!route_table_.AddAllRoute(tap)) {
                     return false;
                 }
 
-                // Android requires the VPN to manage the routing table itself because it is a default gateway hybrid architecture.
-                rib_ = rib;
-
-                // Set up VPN subnet ip route.
-                uint32_t cidr = ntohl(tap->SubmaskAddress);
-                cidr = cidr & ntohl(tap->IPAddress);
-                cidr = htonl(cidr);
-                rib->AddRoute(cidr, IPEndPoint::NetmaskToPrefix(tap->SubmaskAddress), tap->GatewayServer);
-
-                // Why does Android/APPLE-IOS load routing table information?
-                // This is to implement the IP diversion function of the HTTP proxy to prevent all traffic from going to the VPN server,
-                // Because there are some scenarios that do not want to go through the VPN server.
-                if (ppp::string bypass_ip_list = std::move(bypass_ip_list_); bypass_ip_list.size() > 0) {
-                    // IP address of the virtual network card is used here to make it inconsistent with the condition of determining
-                    // The next hop gateway of the route in the IsBypassIpAddress function.
-                    bool bypass_loaded = rib->AddAllRoutes(bypass_ip_list, IPEndPoint::LoopbackAddress);
-#if defined(_ANDROID)
-ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
-                        (int)bypass_ip_list.size(), bypass_loaded ? 1 : 0);
-#endif
-                    ppp::telemetry::Log(Level::kDebug, "client", "bypass list updated");
-                }
-
-                // Add dns route set rules.
-                uint32_t gws[] = {tap->GatewayServer, IPEndPoint::LoopbackAddress};
-                ppp::unordered_set<uint32_t> dns_serverss_[2];
-                ppp::function<void(uint32_t)> add_bypass_ip =
-                    [&dns_serverss_](uint32_t ip) noexcept {
-                        dns_serverss_[1].emplace(ip);
-                    };
-
-                if (NULLPTR != dns_interceptor_) {
-                    dns_interceptor_->CollectReachabilityIps(
-                        configuration_,
-                        configuration_->dns.intercept_unmatched,
-                        [&dns_serverss_](uint32_t ip) noexcept {
-                            dns_serverss_[0].emplace(ip);
-                        },
-                        [&dns_serverss_](uint32_t ip) noexcept {
-                            dns_serverss_[1].emplace(ip);
-                        });
-                }
-
-                // Compare two lists and remove duplicate ip addresses that appear in both lists.
-                ppp::collections::Dictionary::DeduplicationList(dns_serverss_[1], dns_serverss_[0]);
-                for (int i = 0; i < arraysizeof(gws); i++) {
-                    uint32_t gw = gws[i];
-                    for (auto& ip : dns_serverss_[i]) {
-                        rib->AddRoute(ip, 32, gw);
-                    }
-                }
-
-                // Add VPN remote server to IPList bypass route table iplist.
                 return AddRemoteEndPointToIPList(Ipep::ToAddress(IPEndPoint::LoopbackAddress));
             }
 #endif
@@ -2224,259 +2146,12 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                 return false;
             }
 
-            /** @brief Applies hosted-network route and DNS changes after the remote session is usable. */
-            bool VEthernetNetworkSwitcher::TryApplyHostedNetworkRoutes() noexcept {
-#if defined(_ANDROID) || defined(_IPHONE)
-                return true;
-#else
-                std::shared_ptr<ITap> tap = GetTap();
-                if (NULLPTR == tap || !tap->IsHostedNetwork()) {
-                    return true;
-                }
-
-                if (route_added_) {
-                    return true;
-                }
-
-                if (!route_apply_ready_) {
-                    ppp::telemetry::Log(Level::kInfo, "client", "route setup deferred: Open() is still preparing route state");
-                    ppp::telemetry::Count("client.route.defer", 1);
-                    return true;
-                }
-
-                std::shared_ptr<VEthernetExchanger> exchanger = exchanger_;
-                if (NULLPTR == exchanger || exchanger->GetNetworkState() != VEthernetExchanger::NetworkState_Established) {
-                    ppp::telemetry::Log(Level::kInfo, "client", "route setup deferred: exchanger is not established");
-                    ppp::telemetry::Count("client.route.defer", 1);
-                    return true;
-                }
-
-                if (exchangeof(route_added_, true)) {
-                    return true;
-                }
-
-#if defined(_WIN32)
-                // Use the Paper-Airplane NSP/LSP session layer forwarding plugins!
-                if (!UsePaperAirplaneController()) {
-                    route_added_ = false;
-                    ppp::telemetry::Log(Level::kInfo, "client", "route setup failed: paper-airplane controller unavailable");
-                    ppp::telemetry::Count("client.route.fail.paper_airplane", 1);
-                    return false;
-                }
-#endif
-
-                // VPN routes need to be configured for the operating system to configure the bearer network and overlapping network links.
-                AddRoute();
-
-                {
-                    ppp::telemetry::SpanScope span("client.dns.apply");
-                    struct ScopedDnsApplyHistogram final {
-                        std::chrono::steady_clock::time_point started_at = std::chrono::steady_clock::now();
-
-                        ~ScopedDnsApplyHistogram() noexcept {
-                            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started_at).count();
-                            ppp::telemetry::Histogram("client.dns.apply.us", elapsed);
-                        }
-                    } dns_apply_histogram;
-
-#if defined(_WIN32)
-                    // Configure all network card DNS servers in the entire operating system, because not doing so will cause DNS Leak and DNS contamination problems only Windows.
-                    auto tun_ni = tun_ni_;
-                    if (NULLPTR != tun_ni) {
-                        ppp::win32::network::SetAllNicsDnsAddresses(tun_ni->DnsAddresses, ni_dns_servers_);
-                    }
-
-                    // Windows clients need to request the operating system FLUSH to reset all DNS query cache immediately after
-                    // The VPN is constructed, because the original DNS cache may not be the best destination IP resolution record
-                    // Available in the region where the VPN server is located.
-                    ppp::tap::TapWindows::DnsFlushResolverCache();
-
-                    // Delete the default route of a physical network card in a single attempt without a reason.
-                    auto underlying_ni = underlying_ni_;
-                    if (NULLPTR != underlying_ni) {
-                        ppp::win32::network::DeleteAllDefaultGatewayRoutes(underlying_ni->GatewayServer);
-                    }
-#else
-                    // Set tun/tap vnic binding dns servers list to the linux operating system configuration files.
-                    auto tun_ni = tun_ni_;
-                    if (NULLPTR != tun_ni) {
-                        ppp::unix__::UnixAfx::SetDnsAddresses(tun_ni->DnsAddresses);
-                    }
-#endif
-                }
-                ppp::telemetry::Log(Level::kDebug, "client", "DNS setup");
-                ppp::telemetry::Count("client.dns.setup", 1);
-
-                // Run the default gateway route protector.
-                ProtectDefaultRoute();
-
-                ppp::telemetry::Log(Level::kInfo, "client", "route setup applied after exchanger established");
-                return true;
-#endif
-            }
-
-            /** @brief Installs VPN route entries into host operating system. */
-            void VEthernetNetworkSwitcher::AddRoute() noexcept {
-                ppp::telemetry::SpanScope span("client.route.apply");
-                struct ScopedRouteApplyHistogram final {
-                    std::chrono::steady_clock::time_point started_at = std::chrono::steady_clock::now();
-
-                    ~ScopedRouteApplyHistogram() noexcept {
-                        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started_at).count();
-                        ppp::telemetry::Histogram("client.route.apply.us", elapsed);
-                    }
-                } route_apply_histogram;
-
-                ppp::telemetry::Log(Level::kDebug, "client", "route add");
-                ppp::telemetry::Count("client.route.add", 1);
-#if defined(_WIN32)
-                // Find and delete all default route information!
-                if (auto tap = GetTap(); NULLPTR != tap) {
-                    ppp::win32::network::DeleteAllDefaultGatewayRoutes(default_routes_, { tap->GatewayServer });
-                }
-
-                // Adds the loaded route table to the operating system.
-                ppp::win32::network::AddAllRoutes(rib_);
-#elif defined(_MACOS)
-                // Delete all found default gateway routes.
-                if (auto underlying_ni = GetUnderlyingNetworkInterface(); NULLPTR != underlying_ni) {
-                    if (auto tap = GetTap(); NULLPTR != tap) {
-                        ppp::tap::TapDarwin* darwin_tap = dynamic_cast<ppp::tap::TapDarwin*>(tap.get());
-                        if (NULLPTR != darwin_tap && !darwin_tap->IsPromisc()) {
-                            if (UnixNetworkInterface* ni = dynamic_cast<UnixNetworkInterface*>(underlying_ni.get()); NULLPTR != ni) {
-                                for (auto&& [ip, gw] : ni->DefaultRoutes) {
-                                    ppp::darwin::tun::utun_del_route(ip, gw);
-                                }
-                            }
-                        }
-                    }
-
-                    // Adds the loaded route table to the operating system.
-                    ppp::tap::TapDarwin::AddAllRoutes(rib_);
-                }
-#else
-                // Adds the loaded route table to the operating system.
-                if (auto underlying_ni = GetUnderlyingNetworkInterface(); NULLPTR != underlying_ni) {
-                    if (auto tap_ni = GetTapNetworkInterface(); NULLPTR != tap_ni) {
-                        // Find and delete all default route information.
-                        if (auto tap = GetTap(); NULLPTR != tap) {
-                            // Find all default gateway routing lists and remove them, but only in non-promiscuous mode.
-                            ppp::tap::TapLinux* linux_tap = dynamic_cast<ppp::tap::TapLinux*>(tap.get());
-                            if (NULLPTR != linux_tap && !linux_tap->IsPromisc()) {
-                                RouteInformationTablePtr default_routes = ppp::tap::TapLinux::FindAllDefaultGatewayRoutes({ tap->GatewayServer });
-                                default_routes_ = default_routes;
-
-                                // Delete all default route table information found.
-                                if (NULLPTR != default_routes) {
-                                    ppp::tap::TapLinux::DeleteAllRoutes(Linux_GetNetworkInterfaceName(tap, tap_ni, underlying_ni, nics_), default_routes);
-                                }
-                            }
-
-                            // Add all routes configured in VPN/RIB to the operating system.
-                            ppp::tap::TapLinux::AddAllRoutes(Linux_GetNetworkInterfaceName(tap, tap_ni, underlying_ni, nics_), rib_);
-                        }
-                    }
-                }
-#endif
-                // Configure the DNS servers used by the virtual network adapter to route to the operating system.
-                AddRouteWithDnsServers();
-            }
-
-            /** @brief Deletes conflicting default routes while VPN is active. */
-            bool VEthernetNetworkSwitcher::DeleteAllDefaultRoute() noexcept {
-                if (auto tap = GetTap(); NULLPTR != tap) {
-#if defined(_WIN32)
-                    // Find and delete all disallowed windows gateway routes.
-                    ppp::vector<MIB_IPFORWARDROW> default_routes;
-                    ppp::win32::network::DeleteAllDefaultGatewayRoutes(default_routes, { tap->GatewayServer });
-                    return true;
-#else
-#if defined(_MACOS)
-                    auto unix_tap = dynamic_cast<ppp::tap::TapDarwin*>(tap.get());
-#else
-                    auto unix_tap = dynamic_cast<ppp::tap::TapLinux*>(tap.get());
-#endif
-                    if (NULLPTR != unix_tap && !unix_tap->IsPromisc()) {
-#if defined(_MACOS)
-                        // Find and delete all disallowed macos gateway routes.
-                        auto rib = ppp::tap::TapDarwin::FindAllDefaultGatewayRoutes({ tap->GatewayServer });
-                        if (NULLPTR != rib) {
-                            for (auto&& [ip, gw] : *rib) {
-                                ppp::darwin::tun::utun_del_route(ip, gw);
-                            }
-                        }
-#else
-                        // Find and delete all disallowed linux gateway routes.
-                        auto rib = ppp::tap::TapLinux::FindAllDefaultGatewayRoutes({ tap->GatewayServer });
-                        if (NULLPTR != rib) {
-                            ppp::tap::TapLinux::DeleteAllRoutes2(rib);
-                        }
-#endif
-                        return true;
-                    }
-#endif
-                }
-                return false;
-            }
-
             /** @brief Removes VPN route entries and restores system defaults. */
             void VEthernetNetworkSwitcher::DeleteRoute() noexcept {
                 ClearPeerPrefixRoutes();
-                ppp::telemetry::Log(Level::kDebug, "client", "route delete");
-                ppp::telemetry::Count("client.route.delete", 1);
-#if defined(_WIN32)
-                // Delete the loaded route table from the windows operating system.
-                ppp::win32::network::DeleteAllRoutes(rib_);
-
-                // Add and delete all windows default route information!
-                ppp::win32::network::AddAllRoutes(default_routes_);
-
-                // Force to set the network card gateway server, not just manually add the routing table,
-                // In the previous system can add routes,
-                // The system will automatically set the network card, but the latest WIN11 can not.
-                if (std::shared_ptr<NetworkInterface> ni = underlying_ni_; NULLPTR != ni) {
-                    ppp::win32::network::SetDefaultIPGateway(ni->Index, { ni->GatewayServer });
-                }
-#elif defined(_MACOS)
-                // Delete the loaded route table from the osx operating system.
-                if (auto underlying_ni = GetUnderlyingNetworkInterface(); NULLPTR != underlying_ni) {
-                    // Delete all rib route table information found.
-                    ppp::tap::TapDarwin::DeleteAllRoutes(rib_);
-
-                    // Add and delete all os-x default route information!
-                    if (auto tap = GetTap(); NULLPTR != tap) {
-                        ppp::tap::TapDarwin* darwin_tap = dynamic_cast<ppp::tap::TapDarwin*>(tap.get());
-                        if (NULLPTR != darwin_tap && !darwin_tap->IsPromisc()) {
-                            if (UnixNetworkInterface* ni = dynamic_cast<UnixNetworkInterface*>(underlying_ni.get()); NULLPTR != ni) {
-                                for (auto&& [ip, gw] : ni->DefaultRoutes) {
-                                    ppp::darwin::tun::utun_add_route(ip, gw);
-                                }
-                            }
-                        }
-                    }
-                }
-#else
-                // Delete the loaded route table from the linux operating system.
-                if (auto underlying_ni = GetUnderlyingNetworkInterface(); NULLPTR != underlying_ni) {
-                    if (auto tap_ni = GetTapNetworkInterface(); NULLPTR != tap_ni) {
-                        if (auto tap = GetTap(); NULLPTR != tap) {
-                            // Delete all rib route table information found.
-                            ppp::tap::TapLinux::DeleteAllRoutes(Linux_GetNetworkInterfaceName(tap, tap_ni, underlying_ni, nics_), rib_);
-
-                            // Add and delete all linux-t default route information!
-                            if (auto default_routes = default_routes_; NULLPTR != default_routes) {
-                                ppp::tap::TapLinux::AddAllRoutes(Linux_GetNetworkInterfaceName(tap, tap_ni, underlying_ni, nics_), default_routes);
-                            }
-                        }
-                    }
-                }
-#endif
-
-                // Fix and restore physical nic next hop route settings.
+                route_table_.DeleteRoute();
                 FixUnderlyingNgw();
-
-                // Delete all vpn dns server routes from the operating system.
-                DeleteRouteWithDnsServers();
+                route_table_.DeleteRouteWithDnsServers();
             }
 
             /** @brief Returns formatted cached remote URI string. */
@@ -2620,332 +2295,6 @@ ANDROID_DNS_REDIRECT_TRACE( "bypass_ip_list load len=%d ok=%d",
                 return any;
             }
 
-            /** @brief Adds DNS-specific route exceptions to operating system table. */
-            void VEthernetNetworkSwitcher::AddRouteWithDnsServers() noexcept {
-                // Clear the current cached dns server ip address list.
-                for (auto& dns_servers : dns_serverss_) {
-                    dns_servers.clear();
-                }
-
-                // Obtain the IP address list of the DNS server configured on the current physical bearer NIC and VPN virtual network adapter.
-                auto add_dns_server_to_dns_servers =
-                    [](const std::shared_ptr<NetworkInterface>& ni, ppp::unordered_set<uint32_t>& dns_servers) noexcept {
-                        if (NULLPTR == ni) {
-                            return false;
-                        }
-
-                        uint32_t ips[2] = { IPEndPoint::AnyAddress, IPEndPoint::AnyAddress };
-                        boost::asio::ip::address nips[] = { ni->IPAddress, ni->SubmaskAddress };
-                        for (int i = 0; i < arraysizeof(nips); i++) {
-                            boost::asio::ip::address& ip = nips[i];
-                            if (ip.is_v4()) {
-                                ips[i] = ip.to_v4().to_uint();
-                            }
-                        }
-
-                        uint32_t rip = ips[0] & ips[1];
-                        for (boost::asio::ip::address& ip : ni->DnsAddresses) {
-                            if (ip.is_v6()) {
-                                continue;
-                            }
-
-                            if (!ip.is_v4()) {
-                                continue;
-                            }
-
-                            if (ip.is_multicast()) {
-                                continue;
-                            }
-
-                            if (ip.is_loopback()) {
-                                continue;
-                            }
-
-                            if (ip.is_unspecified()) {
-                                continue;
-                            }
-
-                            if (IPEndPoint::IsInvalid(ip)) {
-                                continue;
-                            }
-
-                            uint32_t dip = ip.to_v4().to_uint();
-                            uint32_t tip = (dip & ips[1]);
-                            if (tip == rip) {
-                                continue;
-                            }
-
-                            dip = htonl(dip);
-                            dns_servers.emplace(dip);
-                        }
-                        return true;
-                    };
-
-                add_dns_server_to_dns_servers(tun_ni_, dns_serverss_[0]);
-                add_dns_server_to_dns_servers(underlying_ni_, dns_serverss_[1]);
-
-                ppp::function<void(uint32_t)> add_bypass_ip =
-                    [this](uint32_t ip) noexcept {
-                        dns_serverss_[1].emplace(ip);
-                    };
-
-                if (NULLPTR != dns_interceptor_) {
-                    dns_interceptor_->CollectReachabilityIps(
-                        configuration_,
-                        configuration_->dns.intercept_unmatched,
-                        [this](uint32_t ip) noexcept {
-                            dns_serverss_[0].emplace(ip);
-                        },
-                        add_bypass_ip);
-
-                    const dns::FakeIpPool* fake_ip_pool = dns_interceptor_->GetFakeIpPool();
-                    if (NULLPTR != fake_ip_pool && fake_ip_pool->IsEnabled()) {
-                        if (std::shared_ptr<ITap> tap = GetTap(); NULLPTR != tap) {
-                            AddRoute(fake_ip_pool->RouteNetwork(), tap->GatewayServer, fake_ip_pool->RoutePrefix());
-                        }
-                    }
-                }
-
-                // Compare two lists and remove duplicate ip addresses that appear in both lists.
-                ppp::collections::Dictionary::DeduplicationList(dns_serverss_[1], dns_serverss_[0]);
-
-                // Add the routing gateway of these DNS as the vpn server, mainly to solve the problem of interference.
-                if (std::shared_ptr<ITap> tap = GetTap(); NULLPTR != tap) {
-                    for (uint32_t ip : dns_serverss_[0]) {
-                        AddRoute(ip, tap->GatewayServer, 32);
-                    }
-                }
-
-                // Add the dns route table to the loopback settings of the physical nic.
-                if (std::shared_ptr<NetworkInterface> ni = underlying_ni_; NULLPTR != ni) {
-                    boost::asio::ip::address gw = ni->GatewayServer;
-                    if (gw.is_v4()) {
-                        uint32_t next_hop = htonl(gw.to_v4().to_uint());
-                        for (uint32_t ip : dns_serverss_[1]) {
-                            AddRoute(ip, next_hop, 32);
-                        }
-                    }
-                }
-            }
-
-            /** @brief Adds one host route entry to operating system table. */
-            bool VEthernetNetworkSwitcher::AddRoute(uint32_t ip, uint32_t gw, int prefix) noexcept {
-#if defined(_WIN32)
-                MIB_IPFORWARDROW route;
-                if (ppp::win32::network::Router::GetBestRoute(ip, route)) {
-                    if (route.dwForwardDest == ip && route.dwForwardNextHop != gw) {
-                        ppp::win32::network::Router::Delete(route);
-                    }
-                }
-
-                // Add dns server list IP routing to the windows operating system.
-                uint32_t mask = IPEndPoint::PrefixToNetmask(prefix);
-                return ppp::win32::network::Router::Add(ip, mask, gw, 1);
-#elif defined(_MACOS)
-                // Add dns server list IP routing to the macos operating system.
-                return ppp::darwin::tun::utun_add_route(ip, prefix, gw);
-#else
-                // If gateway is of a physical network card, it means that this is the NS route for physical network card.
-                if (std::shared_ptr<NetworkInterface> ni = underlying_ni_; NULLPTR != ni) {
-                    boost::asio::ip::address next_hop = ni->GatewayServer;
-                    if (next_hop.is_v4() && htonl(next_hop.to_v4().to_uint()) == gw) {
-                        return ppp::tap::TapLinux::AddRoute(ni->Name, ip, 32, gw);
-                    }
-                }
-
-                // Add dns server list IP routing to the linux operating system.
-                std::shared_ptr<ppp::tap::ITap> tap = GetTap();
-                if (NULLPTR == tap) {
-                    return false;
-                }
-
-                ppp::tap::TapLinux* linux_tap = dynamic_cast<ppp::tap::TapLinux*>(tap.get());
-                if (NULLPTR == linux_tap) {
-                    return false;
-                }
-
-                return linux_tap->AddRoute(ip, prefix, gw);
-#endif
-            }
-
-#if defined(_WIN32)
-            /** @brief Deletes one host route entry from Windows route table snapshot. */
-            bool VEthernetNetworkSwitcher::DeleteRoute(const std::shared_ptr<MIB_IPFORWARDTABLE>& mib, uint32_t ip, uint32_t gw, int prefix) noexcept {
-                // Delete the IP route for the dns server list added for the windows operating system.
-                if (NULLPTR == mib) {
-                    return false;
-                }
-
-                uint32_t mask = IPEndPoint::PrefixToNetmask(prefix);
-                return ppp::win32::network::Router::Delete(mib, ip, mask, gw);
-            }
-#else
-            /** @brief Deletes one host route entry from Unix route table. */
-            bool VEthernetNetworkSwitcher::DeleteRoute(uint32_t ip, uint32_t gw, int prefix) noexcept {
-#if defined(_MACOS)
-                // Delete the IP route for the dns server list added for the macos operating system.
-                return ppp::darwin::tun::utun_del_route(ip, prefix, gw);
-#else
-                // // If gateway is of a physical network card, it means that this is the NS route for physical network card.
-                if (std::shared_ptr<NetworkInterface> ni = underlying_ni_; NULLPTR != ni) {
-                    boost::asio::ip::address next_hop = ni->GatewayServer;
-                    if (next_hop.is_v4() && htonl(next_hop.to_v4().to_uint()) == gw) {
-                        return ppp::tap::TapLinux::DeleteRoute(ni->Name, ip, 32, gw);
-                    }
-                }
-
-                // Delete the IP route for the dns server list added for the linux operating system.
-                std::shared_ptr<ppp::tap::ITap> tap = GetTap();
-                if (NULLPTR == tap) {
-                    return false;
-                }
-
-                ppp::tap::TapLinux* linux_tap = dynamic_cast<ppp::tap::TapLinux*>(tap.get());
-                if (NULLPTR == linux_tap) {
-                    return false;
-                }
-
-                return linux_tap->DeleteRoute(ip, prefix, gw);
-#endif
-            }
-#endif
-
-            /** @brief Removes DNS-specific route exceptions from operating system table. */
-            void VEthernetNetworkSwitcher::DeleteRouteWithDnsServers() noexcept {
-                // Delete all vpn dns server routes from the operating system.
-                if (std::shared_ptr<ppp::tap::ITap> tap = GetTap(); NULLPTR != tap) {
-#if defined(_WIN32)
-                    // Delete the IP route for the dns server list added for the windows operating system.
-                    if (auto mib = ppp::win32::network::Router::GetIpForwardTable(); NULLPTR != mib) {
-                        for (uint32_t ip : dns_serverss_[0]) {
-                            DeleteRoute(mib, ip, tap->GatewayServer, 32);
-                        }
-                    }
-#else
-                    // Delete the IP route for the dns server list added for the macos operating system.
-                    for (uint32_t ip : dns_serverss_[0]) {
-                        DeleteRoute(ip, tap->GatewayServer, 32);
-                    }
-#endif
-                }
-
-                if (std::shared_ptr<NetworkInterface> ni = underlying_ni_; NULLPTR != ni) {
-                    boost::asio::ip::address gw = ni->GatewayServer;
-                    if (gw.is_v4()) {
-                        uint32_t next_hop = htonl(gw.to_v4().to_uint());
-#if defined(_WIN32)
-                        // Delete the IP route for the dns server list added for the windows operating system.
-                        if (auto mib = ppp::win32::network::Router::GetIpForwardTable(); NULLPTR != mib) {
-                            for (uint32_t ip : dns_serverss_[1]) {
-                                DeleteRoute(mib, ip, next_hop, 32);
-                            }
-                        }
-#else
-                        // Delete the IP route for the dns server list added for the macos operating system.
-                        for (uint32_t ip : dns_serverss_[1]) {
-                            DeleteRoute(ip, next_hop, 32);
-                        }
-#endif
-                    }
-                }
-
-                // Clear the current cached dns server ip address list.
-                for (auto& dns_servers : dns_serverss_) {
-                    dns_servers.clear();
-                }
-            }
-
-            // Routes need to be protected on Windows to prevent third - party programs(such as network card drivers)
-            // From silently modifying the current gateway route and forcing out the VPN virtual gateway route.According to our observation,
-            // In some PC and network production environments, third - party programs will destroy VPN deployment routing table information
-            // At certain times.In PPP PRIVATE NETWORK 1, this NETWORK route protector exists by default, but PPP PRIVATE Network 2 does
-            // Not currently exist, so a new implementation of this section is needed.
-            /** @brief Starts background default-route protector worker. */
-            bool VEthernetNetworkSwitcher::ProtectDefaultRoute() noexcept {
-                auto tap = GetTap();
-                if (NULLPTR == tap) {
-                    return false;
-                }
-
-#if !defined(_WIN32)
-#if defined(_MACOS)
-                auto unix_tap = dynamic_cast<ppp::tap::TapDarwin*>(tap.get());
-#else
-                auto unix_tap = dynamic_cast<ppp::tap::TapLinux*>(tap.get());
-#endif
-                if (NULLPTR == unix_tap || unix_tap->IsPromisc()) {
-                    return false;
-                }
-#endif
-
-                // Create a new network protection backend subthread.
-                auto self = std::static_pointer_cast<VEthernetNetworkSwitcher>(shared_from_this());
-                /** @brief Background loop that periodically repairs default-route drift. */
-                std::thread([self]() noexcept {
-                    auto prepare = [self]() noexcept {
-                        // If the current VEthernet framework object instance is released, the process is break.
-                        if (self->IsDisposed()) {
-                            return false;
-                        }
-
-                        // If the route is not added to the system, the route pops out without setting the flag.
-                        if (!self->route_added_) {
-                            return false;
-                        }
-
-                        // Check whether the physical nic interface information still exists.
-                        std::shared_ptr<NetworkInterface> underlying_ni = self->underlying_ni_;
-                        if (NULLPTR == underlying_ni) {
-                            return false;
-                        }
-
-                        // If the physical network adapter gateway server is not IPV4, the process is displayed.
-                        boost::asio::ip::address gw = underlying_ni->GatewayServer;
-                        if (!gw.is_v4()) {
-                            return false;
-                        }
-
-                        return true;
-                    };
-
-                    ppp::SetThreadName("protector");
-                    for (;;) {
-                        // Gets the current process processing start time.
-                        uint64_t start = ppp::GetTickCount();
-
-                        // If the pre-preparation check processing fails, just jump out of the loop because the object is being released.
-                        bool ok = prepare();
-                        if (!ok) {
-                            break;
-                        }
-
-                        // Try to get the lock, if you can't get the lock, do not deal with it and wait for the next execution.
-                        if (self->prdr_.try_lock()) {
-                            ok = prepare();
-                            if (ok) {
-                                ok = self->DeleteAllDefaultRoute();
-                            }
-
-                            // Release the obtained prdr lock and decide whether to exit the process.
-                            self->prdr_.unlock();
-                            if (!ok) {
-                                break;
-                            }
-                        }
-
-                        // Calculate how much time the thread has to wait for sleep.
-                        uint64_t now = ppp::GetTickCount();
-                        uint64_t delta = 0;
-                        if (now >= start) {
-                            delta = 1000 - std::min<uint64_t>(1000, now - start);
-                        }
-
-                        // Check whether the default gateway route is faulty every second.
-                        ppp::Sleep(delta);
-                    }
-                }).detach();
-                return true;
-            }
 #endif
 
             /** @brief Checks whether destination IP should bypass VPN forwarding path. */

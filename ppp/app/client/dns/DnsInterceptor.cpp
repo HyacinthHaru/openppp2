@@ -11,7 +11,7 @@
 #include <ppp/app/client/dns/DnsUdpRelay.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/dns/DnsResolver.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
