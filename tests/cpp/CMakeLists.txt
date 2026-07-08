@@ -38,7 +38,7 @@ function(openppp2_add_cpp_test target)
         target_compile_options(${target} PRIVATE -fprofile-instr-generate -fcoverage-mapping)
         target_link_options(${target} PRIVATE -fprofile-instr-generate)
     endif()
-    if(target STREQUAL "p2p_replay_window_test" OR target STREQUAL "base64_test" OR target STREQUAL "dns_server_validation_test" OR target STREQUAL "dns_wire_validation_test" OR target STREQUAL "sysctl_validation_test" OR target STREQUAL "dns_redirect_plan_test" OR target STREQUAL "dns_reachability_test" OR target STREQUAL "dns_response_handler_test" OR target STREQUAL "dns_route_dispatcher_test" OR target STREQUAL "dns_udp_relay_test" OR target STREQUAL "fake_ip_pool_test" OR target STREQUAL "dns_fake_ip_response_test")
+    if(target STREQUAL "p2p_replay_window_test" OR target STREQUAL "base64_test" OR target STREQUAL "dns_server_validation_test" OR target STREQUAL "dns_wire_validation_test" OR target STREQUAL "sysctl_validation_test" OR target STREQUAL "dns_redirect_plan_test" OR target STREQUAL "dns_reachability_test" OR target STREQUAL "dns_response_handler_test" OR target STREQUAL "dns_route_dispatcher_test" OR target STREQUAL "dns_udp_relay_test" OR target STREQUAL "fake_ip_pool_test" OR target STREQUAL "dns_fake_ip_response_test" OR target STREQUAL "quic_reject_rate_limit_test")
         target_link_libraries(${target} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     endif()
     add_test(NAME ${target} COMMAND ${target})
@@ -77,3 +77,8 @@ openppp2_add_cpp_test(fake_ip_pool_test SOURCES
 openppp2_add_cpp_test(dns_fake_ip_response_test SOURCES
     dns_fake_ip_response_test.cpp
     "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsFakeIpResponse.cpp")
+openppp2_add_cpp_test(quic_reject_rate_limit_test SOURCES
+    quic_reject_rate_limit_test.cpp
+    support/ppp_test_stubs.cpp
+    "${OPENPPP2_ROOT}/ppp/hash/hash_bytes.cpp"
+    "${OPENPPP2_ROOT}/ppp/app/client/QuicRejectRateLimiter.cpp")

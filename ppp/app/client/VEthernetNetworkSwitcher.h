@@ -25,6 +25,11 @@ namespace ppp::net { class ProtectorNetwork; }
 #include <ppp/app/client/ClientNetworkInterface.h>
 #include <ppp/app/client/RouteTableManager.h>
 #include <ppp/app/client/AssignedAddressManager.h>
+#include <ppp/app/client/ClientConnectionTeardown.h>
+#include <ppp/app/client/ClientConnectionOpener.h>
+#include <ppp/app/client/ClientPacketDispatchHandler.h>
+#include <ppp/app/client/ClientBypassRouteLoader.h>
+#include <ppp/app/client/QuicRejectRateLimiter.h>
 #include <ppp/net/native/rib.h>
 
 #if defined(_WIN32)
@@ -65,6 +70,10 @@ namespace ppp {
                 friend class dns::DnsInterceptor;
                 friend class RouteTableManager;
                 friend class AssignedAddressManager;
+                friend class ClientConnectionTeardown;
+                friend class ClientConnectionOpener;
+                friend class ClientPacketDispatchHandler;
+                friend class ClientBypassRouteLoader;
                 friend class VEthernetNetworkTcpipStack;
 
             private:
@@ -74,7 +83,6 @@ namespace ppp {
                 }                                                                   VEthernetIcmpPacket;
 
                 typedef ppp::unordered_map<int, VEthernetIcmpPacket>                VEthernetIcmpPacketTable;
-                typedef ppp::unordered_map<ppp::string, UInt64>                     QuicRejectRateLimitTable;
                 typedef ppp::threading::Timer                                       Timer;
                 typedef Timer::TimeoutEventHandlerPtr                                TimeoutEventHandlerPtr;
                 typedef ppp::unordered_map<void*, TimeoutEventHandlerPtr>            TimeoutEventHandlerTable;
@@ -201,8 +209,6 @@ namespace ppp {
 
                 virtual bool                                                        DatagramOutput(const boost::asio::ip::udp::endpoint& sourceEP, const boost::asio::ip::udp::endpoint& destinationEP, void* packet, int packet_size, bool caching = true) noexcept;
                 boost::asio::ip::address                                           RewriteFakeIpAddress(const boost::asio::ip::address& addr) const noexcept;
-                virtual bool                                                        OnUdpPacketInput(const std::shared_ptr<IPFrame>& packet) noexcept;
-                virtual bool                                                        OnIcmpPacketInput(const std::shared_ptr<IPFrame>& packet) noexcept;
 
             private:
 #if !defined(_ANDROID) && !defined(_IPHONE)
@@ -212,9 +218,6 @@ namespace ppp {
                 bool                                                                AddAllRoute(const std::shared_ptr<ITap>& tap) noexcept;
 #endif
 
-                bool                                                                IsApprovedIPv6Packet(Byte* packet, int packet_length) noexcept;
-                bool                                                                RejectBlockedQuic(const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<UdpFrame>& frame) noexcept;
-                bool                                                                ShouldEmitBlockedQuicReject(const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<UdpFrame>& frame, UInt64 now) noexcept;
                 bool                                                                RedirectDnsServer(const std::shared_ptr<VEthernetExchanger>& exchanger, const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<UdpFrame>& frame, const std::shared_ptr<ppp::net::packet::BufferSegment>& messages) noexcept;
                 bool                                                                EmplaceTimeout(void* k, const std::shared_ptr<ppp::threading::Timer::TimeoutEventHandler>& timeout) noexcept;
                 bool                                                                DeleteTimeout(void* k) noexcept;
@@ -246,13 +249,9 @@ namespace ppp {
                 void                                                                RestoreAssignedIPv4() noexcept;
 #endif
 
-                bool                                                                ER(const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<IcmpFrame>& frame, int ttl, const std::shared_ptr<ppp::threading::BufferswapAllocator>& allocator) noexcept;
-                bool                                                                TE(const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<IcmpFrame>& frame, UInt32 source, const std::shared_ptr<ppp::threading::BufferswapAllocator>& allocator) noexcept;
                 bool                                                                ERORTE(int ack_id) noexcept;
                 bool                                                                PreparedAggregator() noexcept;
                 bool                                                                IPAddressIsGatewayServer(UInt32 ip, UInt32 gw, UInt32 mask) noexcept { return ip == gw ? true : htonl((ntohl(gw) & ntohl(mask)) + 1) == ip; }
-                bool                                                                EchoOtherServer(const std::shared_ptr<VEthernetExchanger>& exchanger, const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<ppp::threading::BufferswapAllocator>& allocator) noexcept;
-                bool                                                                EchoGatewayServer(const std::shared_ptr<VEthernetExchanger>& exchanger, const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<ppp::threading::BufferswapAllocator>& allocator) noexcept;
 
             private:
                 std::shared_ptr<VEthernetExchanger>                                 exchanger_;
@@ -261,7 +260,7 @@ namespace ppp {
                 std::shared_ptr<ppp::transmissions::ITransmissionQoS>                 qos_;
                 std::shared_ptr<ppp::transmissions::ITransmissionStatistics>          statistics_;
                 VEthernetIcmpPacketTable                                            icmppackets_;
-                QuicRejectRateLimitTable                                            quic_reject_rate_limits_;
+                QuicRejectRateLimiter                                               quic_reject_limiter_;
                 struct {
                     int                                                             icmppackets_aid_  = 0;
                     bool                                                            block_quic_       = false;
@@ -321,6 +320,10 @@ namespace ppp {
 #endif
                 RouteTableManager                                                   route_table_;
                 AssignedAddressManager                                              address_manager_;
+                ClientConnectionTeardown                                            teardown_;
+                ClientConnectionOpener                                              connection_opener_;
+                ClientPacketDispatchHandler                                         packet_dispatch_;
+                ClientBypassRouteLoader                                             bypass_loader_;
             };
         }
     }
