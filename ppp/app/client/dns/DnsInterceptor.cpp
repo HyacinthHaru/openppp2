@@ -17,6 +17,7 @@
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/net/asio/vdns.h>
 #include <ppp/ipv6/IPv6Auxiliary.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/tap/ITap.h>
 
 #if defined(_ANDROID)
@@ -39,7 +40,11 @@ static bool AndroidDnsRedirectTraceEnabled() noexcept {
     } while (0)
 #endif
 
-#include <message.h>
+#include <common/dnslib/message.h>
+
+using ppp::net::Ipep;
+using ppp::net::IPEndPoint;
+using ppp::tap::ITap;
 
 namespace ppp {
     namespace app {
@@ -180,7 +185,7 @@ namespace ppp {
                                 continue;
                             }
 
-                            ppp::telemetry::Log(Level::kInfo, "client", "DNS STUN candidate ignored: %s", cs.c_str());
+                            ppp::telemetry::Log(ppp::telemetry::Level::kInfo, "client", "DNS STUN candidate ignored: %s", cs.c_str());
                         }
                         if (!stun_cands.empty()) {
                             dns_resolver_->SetStunCandidates(std::move(stun_cands));
@@ -336,7 +341,7 @@ namespace ppp {
 
                         if (NULLPTR != rule && !rule->Server.is_unspecified()) {
                             ppp::dns::ServerEntry entry;
-                            entry.protocol = ppp::dns::ServerEntry::Protocol::UDP;
+                            entry.protocol = ppp::dns::Protocol::UDP;
                             entry.address = rule->Server.to_string();
                             ppp::vector<ppp::dns::ServerEntry> entries;
                             entries.emplace_back(std::move(entry));
@@ -416,9 +421,9 @@ namespace ppp {
                     if (std::shared_ptr<ITap> tap = switcher->GetTap(); NULLPTR != tap) {
                         const uint32_t dest = packet->Destination;
                         const uint32_t gw = IPEndPoint::ToEndPoint(
-                            boost::asio::ip::tcp::endpoint(tap->GatewayServer, IPEndPoint::MinPort)).GetAddress();
+                            IPEndPoint::WrapAddressV4<boost::asio::ip::tcp>(tap->GatewayServer, IPEndPoint::MinPort)).GetAddress();
                         const uint32_t mask = IPEndPoint::ToEndPoint(
-                            boost::asio::ip::tcp::endpoint(tap->SubmaskAddress, IPEndPoint::MinPort)).GetAddress();
+                            IPEndPoint::WrapAddressV4<boost::asio::ip::tcp>(tap->SubmaskAddress, IPEndPoint::MinPort)).GetAddress();
                         plan_input.is_gateway_query =
                             DnsRedirectPlan::IsGatewayDnsServer(dest, gw, mask);
                     }

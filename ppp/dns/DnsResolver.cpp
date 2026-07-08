@@ -1426,6 +1426,7 @@ namespace ppp {
             }
             state->timer = timer;
 
+            boost::system::error_code ec;
             socket->open(remote.protocol(), ec);
             if (ec) {
                 CountDnsTransport(Protocol::DoH, DnsTransportStage::Socket, DnsTransportReason::OpenFailed);
@@ -1709,6 +1710,7 @@ namespace ppp {
                 return;
             }
 
+            boost::system::error_code ec;
             socket->open(remote.protocol(), ec);
             if (ec) {
                 CountDnsTransport(Protocol::DoT, DnsTransportStage::Socket, DnsTransportReason::OpenFailed);
@@ -1954,6 +1956,7 @@ namespace ppp {
             state->slot0 = buffer;
             state->slot1 = source;
 
+            boost::system::error_code ec;
             socket->open(remote.protocol(), ec);
             if (ec) {
                 CountDnsTransport(Protocol::UDP, DnsTransportStage::Socket, DnsTransportReason::OpenFailed);
@@ -2041,6 +2044,7 @@ namespace ppp {
                 return;
             }
 
+            boost::system::error_code ec;
             socket->open(remote.protocol(), ec);
             if (ec) {
                 CountDnsTransport(Protocol::TCP, DnsTransportStage::Socket, DnsTransportReason::OpenFailed);

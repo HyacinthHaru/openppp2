@@ -4,6 +4,10 @@
  */
 
 #include <ppp/configurations/AppConfiguration.h>
+#include <common/aggligator/aggligator.h>
+#include <ppp/transmissions/proxys/IForwarding.h>
+#include <ppp/app/client/proxys/VEthernetHttpProxySwitcher.h>
+#include <ppp/app/client/proxys/VEthernetSocksProxySwitcher.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/LinkTelemetry.h>

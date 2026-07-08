@@ -16,6 +16,7 @@
 #include <ppp/ipv6/IPv6Packet.h>
 #include <ppp/threading/Executors.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/transmissions/IWebsocketTransmission.h>
 

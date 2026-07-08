@@ -45,7 +45,6 @@
 #include <ppp/diagnostics/Error.h>
 
 #include <ppp/app/client/VEthernetExchanger.h>
-#include <ppp/app/client/VEthernetNetworkSwitcher.h>
 
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
 #include <ppp/app/protocol/VirtualEthernetTcpipConnection.h>
@@ -58,6 +57,8 @@ namespace ppp::configurations { class AppConfiguration; }
 namespace ppp {
     namespace app {
         namespace client {
+            class VEthernetNetworkSwitcher;
+
             /**
              * @brief Per-session TCP/IP forwarding handler for the client virtual Ethernet stack.
              *
@@ -152,128 +153,8 @@ namespace ppp {
                     const std::shared_ptr<boost::asio::ip::tcp::socket>&    socket,
                     const boost::asio::ip::tcp::endpoint&                   remoteEP,
                     std::shared_ptr<RinetdConnection>&                      out,
-                    ppp::coroutines::YieldContext&                          y) noexcept {
+                    ppp::coroutines::YieldContext&                          y) noexcept;
 
-                    std::shared_ptr<VEthernetNetworkSwitcher> switcher = exchanger->GetSwitcher();
-                    if (NULLPTR == switcher) {
-                        ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::NetworkInterfaceUnavailable);
-                        return -1;
-                    }
-
-                    bool bypass_ip_address_ok = switcher->IsBypassIpAddress(remoteEP.address());
-                    if (!bypass_ip_address_ok) {
-                        return 1;
-                    }
-
-                    /**
-                     * @brief Internal rinetd adapter that relays lifecycle events to the owner.
-                     *
-                     * @details
-                     * This private class wraps RinetdConnection to forward Update() and
-                     * Dispose() notifications to the TReference owner, ensuring that the
-                     * owner's activity timestamp and disposal are correctly managed.
-                     */
-                    class VEthernetRinetdConnection final : public RinetdConnection {
-                    public:
-                        /**
-                         * @brief Constructs the adapter with owner and socket references.
-                         *
-                         * @param owner         Owner object receiving lifecycle events.
-                         * @param configuration Application configuration.
-                         * @param context       IO context.
-                         * @param strand        Execution strand.
-                         * @param local_socket  Accepted local TCP socket.
-                         */
-                        VEthernetRinetdConnection(
-                            const std::shared_ptr<TReference>&                              owner,
-                            const std::shared_ptr<ppp::configurations::AppConfiguration>&   configuration,
-                            const std::shared_ptr<boost::asio::io_context>&                 context,
-                            const ppp::threading::Executors::StrandPtr&                     strand,
-                            const std::shared_ptr<boost::asio::ip::tcp::socket>&            local_socket) noexcept
-                                : RinetdConnection(configuration, context, strand, local_socket)
-                                , owner_(owner) {
-
-                            }
-                        virtual ~VEthernetRinetdConnection() noexcept {
-                            Finalize();
-                        }
-
-                    public:
-                        /**
-                         * @brief Disposes the underlying rinetd connection.
-                         */
-                        virtual void                                                        Dispose() noexcept override {
-                            RinetdConnection::Dispose();
-                        }
-
-                        /**
-                         * @brief Refreshes the owner's activity timestamp on transport activity.
-                         */
-                        virtual void                                                        Update() noexcept override {
-                            std::shared_ptr<TReference> owner = owner_;
-                            if (NULLPTR != owner) {
-                                owner->Update();
-                            }
-                        }
-
-                    private:
-                        /**
-                         * @brief Releases the owner reference and propagates disposal once.
-                         */
-                        void                                                                Finalize() noexcept {
-                            std::shared_ptr<TReference> owner = std::move(owner_);
-                            if (NULLPTR != owner) {
-                                owner->Dispose();
-                            }
-                        }
-
-                    private:
-                        /** @brief Owner reference held for lifecycle event dispatch. */
-                        std::shared_ptr<TReference>                                         owner_;
-                    };
-
-                    std::shared_ptr<VEthernetRinetdConnection> connection_rinetd =
-                        make_shared_object<VEthernetRinetdConnection>(reference, configuration, context, strand, socket);
-                    if (NULLPTR == connection_rinetd) {
-                        ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::MemoryAllocationFailed);
-                        return -1;
-                    }
-
-#if defined(_LINUX)
-                    connection_rinetd->ProtectorNetwork = switcher->GetProtectorNetwork();
-#endif
-
-                    bool run_ok = connection_rinetd->Open(remoteEP, y);
-                    if (!run_ok) {
-                        ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::TcpConnectFailed);
-                        return -1;
-                    }
-
-                    out = std::move(connection_rinetd);
-                    return 0;
-                }
-
-                /**
-                 * @brief Attempts to open a VMUX socket to a remote host and port.
-                 *
-                 * @details
-                 * Checks whether the exchanger has an active vmux session in the Established
-                 * state. If so, creates a vmux_skt sub-channel and registers disposed/active
-                 * lifecycle callbacks to drive the owner's Update() and Dispose() methods.
-                 *
-                 * @tparam TReference  Owner type providing GetContext(), GetStrand(),
-                 *                     Update(), and Dispose() methods.
-                 * @param reference    Shared owner reference.
-                 * @param exchanger    Active exchanger with vmux state.
-                 * @param host         Destination hostname for the vmux connect request.
-                 * @param port         Destination TCP port number.
-                 * @param socket       Accepted local socket (associated for bookkeeping).
-                 * @param out          Receives the created vmux_skt on success.
-                 * @param y            Coroutine yield context; blocks until connected.
-                 * @return  0 on success (out is valid),
-                 *          1 if vmux is not available or not established,
-                 *         -1 on failure (SetLastError called).
-                 */
                 template <class TReference>
                 static int                                                  Mux(
                     const std::shared_ptr<TReference>&                      reference,
@@ -282,79 +163,8 @@ namespace ppp {
                     const int                                               port,
                     const std::shared_ptr<boost::asio::ip::tcp::socket>&    socket,
                     std::shared_ptr<vmux::vmux_skt>&                        out,
-                    ppp::coroutines::YieldContext&                          y) noexcept {
+                    ppp::coroutines::YieldContext&                          y) noexcept;
 
-                    typedef VEthernetExchanger::NetworkState NetworkState;
-                    typedef std::shared_ptr<vmux::vmux_skt> VmuxSktPtr;
-
-                    if (auto mux = exchanger->GetMux(); NULLPTR != mux) {
-                        auto network_state = exchanger->GetMuxNetworkState();
-                        if (network_state == NetworkState::NetworkState_Established) {
-                            std::shared_ptr<VmuxSktPtr> pmux_connection = make_shared_object<VmuxSktPtr>();
-                            if (NULLPTR == pmux_connection) {
-                                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::MemoryAllocationFailed);
-                                return -1;
-                            }
-
-                            if (!mux->connect_yield(
-                                y,
-                                reference->GetContext(),
-                                reference->GetStrand(),
-                                socket,
-                                host,
-                                port,
-                                pmux_connection)) {
-                                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::ProtocolMuxFailed);
-                                return -1;
-                            }
-                            else {
-                                reference->Update();
-                            }
-
-                            VmuxSktPtr mux_connection = *pmux_connection;
-                            if (NULLPTR == mux_connection) {
-                                ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::ProtocolMuxFailed);
-                                return -1;
-                            }
-
-                            mux_connection->disposed_event =
-                                [reference](vmux::vmux_skt*) noexcept {
-                                    reference->Dispose();
-                                };
-                            mux_connection->active_event =
-                                [reference](vmux::vmux_skt*, bool success) noexcept {
-                                    if (success) {
-                                        reference->Update();
-                                    }
-                                    else {
-                                        reference->Dispose();
-                                    }
-                                };
-
-                            out = mux_connection;
-                            return 0;
-                        }
-                    }
-
-                    return 1;
-                }
-
-                /**
-                 * @brief Attempts to open a VMUX socket to a remote TCP endpoint.
-                 *
-                 * @details
-                 * Converts the endpoint to a host string and delegates to the host/port
-                 * overload of Mux().
-                 *
-                 * @tparam TReference  Owner type (see host/port overload).
-                 * @param reference    Shared owner reference.
-                 * @param exchanger    Active exchanger with vmux state.
-                 * @param remoteEP     Destination TCP endpoint.
-                 * @param socket       Accepted local socket.
-                 * @param out          Receives the created vmux_skt on success.
-                 * @param y            Coroutine yield context.
-                 * @return  0 on success, 1 if vmux unavailable, -1 on failure.
-                 */
                 template <class TReference>
                 static int                                                  Mux(
                     const std::shared_ptr<TReference>&                      reference,
@@ -362,11 +172,7 @@ namespace ppp {
                     const boost::asio::ip::tcp::endpoint&                   remoteEP,
                     const std::shared_ptr<boost::asio::ip::tcp::socket>&    socket,
                     std::shared_ptr<vmux::vmux_skt>&                        out,
-                    ppp::coroutines::YieldContext&                          y) noexcept {
-
-                    ppp::string host = ppp::net::Ipep::ToAddressString<ppp::string>(remoteEP);
-                    return Mux(reference, exchanger, host, remoteEP.port(), socket, out, y); /* https://www.youtube.com/watch?v=FdScisAHKBE */
-                }
+                    ppp::coroutines::YieldContext&                          y) noexcept;
 
             protected:
                 /**

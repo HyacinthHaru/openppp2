@@ -37,6 +37,7 @@
 #include <atomic>
 #include <mutex>
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/protocol/VirtualEthernetMappingPort.h>
 #include <ppp/app/protocol/VirtualEthernetPacket.h>
 #include <ppp/app/mux/vmux_net.h>

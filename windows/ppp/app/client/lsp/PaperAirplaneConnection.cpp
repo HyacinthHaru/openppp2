@@ -6,6 +6,7 @@
 
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkTcpipConnection.h>
+#include <ppp/app/client/VEthernetNetworkTcpipForwarding.inl>
 #include <ppp/app/protocol/VirtualEthernetTcpipConnection.h>
 #include <ppp/app/protocol/templates/TVEthernetTcpipConnection.h>
 #include <ppp/diagnostics/Error.h>

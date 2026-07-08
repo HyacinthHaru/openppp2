@@ -1,3 +1,4 @@
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/transmissions/IWebsocketTransmission.h>
 #include <ppp/net/Socket.h>
 #include <ppp/net/IPEndPoint.h>

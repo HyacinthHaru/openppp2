@@ -1,3 +1,6 @@
+#include <ppp/configurations/AppConfiguration.h>
+#include <common/aggligator/aggligator.h>
+#include <ppp/transmissions/proxys/IForwarding.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetDatagramPort.h>

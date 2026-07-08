@@ -27,6 +27,7 @@
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
+#include <ppp/app/client/proxys/VEthernetLocalProxySwitcher.h>
 
 #if defined(_WIN32)
 #include <windows/ppp/net/proxies/HttpProxy.h>

@@ -1,5 +1,5 @@
-#include <ppp/app/client/VEthernetDatagramPort.h>
 #include <ppp/configurations/AppConfiguration.h>
+#include <ppp/app/client/VEthernetDatagramPort.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/net/Ipep.h>

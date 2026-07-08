@@ -1,5 +1,6 @@
 #include "DnsUdpRelay.h"
 
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/dns/DnsResponseHandler.h>
@@ -10,7 +11,8 @@
 #include <ppp/dns/DnsWireValidation.h>
 #include <ppp/net/Socket.h>
 #include <ppp/threading/Timer.h>
-#include <ppp/threading/Executors.h>
+
+using ppp::threading::Timer;
 
 #if defined(_ANDROID)
 #include <android/log.h>

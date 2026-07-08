@@ -30,6 +30,7 @@
  */
 
 #include <ppp/stdafx.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/Int128.h>
 #include <ppp/net/Firewall.h>
 #include <ppp/net/native/rib.h>
