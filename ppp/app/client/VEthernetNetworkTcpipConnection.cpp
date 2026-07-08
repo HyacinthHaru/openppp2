@@ -1,4 +1,5 @@
 #include <ppp/app/client/VEthernetNetworkTcpipConnection.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>

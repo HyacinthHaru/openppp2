@@ -36,7 +36,6 @@
  * @license GPL-3.0
  */
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/ethernet/VNetstack.h>
 #include <ppp/threading/Executors.h>
@@ -53,6 +52,8 @@
 
 #include <ppp/app/mux/vmux_net.h>
 #include <ppp/app/mux/vmux_skt.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

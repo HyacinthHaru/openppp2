@@ -1,4 +1,5 @@
 #include <ppp/app/server/VirtualEthernetManagedServer.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
 #include <ppp/auxiliary/JsonAuxiliary.h>
 #include <ppp/auxiliary/UriAuxiliary.h>
@@ -62,6 +63,8 @@ namespace ppp {
                 configuration_ = switcher->GetConfiguration();
                 allocator_ = configuration_->GetBufferAllocator();
             }
+
+            VirtualEthernetManagedServer::~VirtualEthernetManagedServer() noexcept = default;
 
             /**
              * @brief Starts asynchronous reconnect loop toward managed server.

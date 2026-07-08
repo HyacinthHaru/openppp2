@@ -7,7 +7,8 @@
 
 #pragma once
 
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
+
 #include <ppp/Int128.h>
 #include <ppp/net/Firewall.h>
 #include <ppp/coroutines/YieldContext.h>

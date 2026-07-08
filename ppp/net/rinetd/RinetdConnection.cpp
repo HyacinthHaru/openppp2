@@ -4,6 +4,7 @@
  */
 
 #include <ppp/net/rinetd/RinetdConnection.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/Socket.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/diagnostics/Error.h>

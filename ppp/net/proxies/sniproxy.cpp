@@ -4,6 +4,7 @@
  */
 
 #include <ppp/net/proxies/sniproxy.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/asio/asio.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/Socket.h>

@@ -1,4 +1,5 @@
 #include <ppp/app/server/VirtualEthernetDatagramPortStatic.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/server/VirtualEthernetExchanger.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
 #include <ppp/app/server/VirtualEthernetDatagramPort.h>
@@ -50,6 +51,16 @@ namespace ppp {
              */
             VirtualEthernetDatagramPortStatic::~VirtualEthernetDatagramPortStatic() noexcept {
                 Finalize();
+            }
+
+            void VirtualEthernetDatagramPortStatic::Update() noexcept {
+                UInt64 now = Executors::GetTickCount();
+                if (onlydns_) {
+                    timeout_ = now + (UInt64)configuration_->udp.dns.timeout * 1000;
+                }
+                else {
+                    timeout_ = now + (UInt64)configuration_->udp.inactive.timeout * 1000;
+                }
             }
 
             /**

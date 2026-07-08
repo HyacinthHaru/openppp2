@@ -7,6 +7,7 @@
 #include <ppp/app/client/dns/DnsReachability.h>
 #include <ppp/app/client/dns/DnsReachabilityParse.h>
 #include <ppp/app/client/dns/Rule.h>
+#include <ppp/configurations/DnsServerEntry.h>
 #include <ppp/dns/DnsResolver.h>
 
 namespace client_dns = ppp::app::client::dns;
@@ -21,14 +22,14 @@ boost::asio::ip::address MakeAddress(const char* text) {
     return address;
 }
 
-app_config::AppConfiguration::DnsServerEntry MakeConfigEntry(
+app_config::DnsServerEntry MakeConfigEntry(
     const char* protocol,
     const char* address,
     const char* url = "",
     const char* hostname = "",
     ppp::vector<ppp::string> bootstrap = {}) {
 
-    app_config::AppConfiguration::DnsServerEntry entry;
+    app_config::DnsServerEntry entry;
     entry.protocol = protocol;
     entry.address = address;
     entry.url = url;
@@ -70,7 +71,7 @@ BOOST_AUTO_TEST_CASE(parse_reachability_ipv4_rejects_multicast) {
 }
 
 BOOST_AUTO_TEST_CASE(build_resolver_entries_maps_protocols) {
-    ppp::vector<app_config::AppConfiguration::DnsServerEntry> config_entries;
+    ppp::vector<app_config::DnsServerEntry> config_entries;
     config_entries.push_back(MakeConfigEntry("doh", "1.1.1.1:443", "https://example/dns-query", "example"));
     config_entries.push_back(MakeConfigEntry("dot", "1.1.1.1:853", "", "dot.example"));
     config_entries.push_back(MakeConfigEntry("doq", "1.1.1.1:853"));
@@ -93,7 +94,7 @@ BOOST_AUTO_TEST_CASE(build_resolver_entries_maps_protocols) {
 }
 
 BOOST_AUTO_TEST_CASE(build_resolver_entries_parses_bootstrap_ips) {
-    ppp::vector<app_config::AppConfiguration::DnsServerEntry> config_entries;
+    ppp::vector<app_config::DnsServerEntry> config_entries;
     config_entries.push_back(MakeConfigEntry(
         "udp", "1.1.1.1:53", "", "", { "8.8.8.8", "invalid-host", "127.0.0.1" }));
 
@@ -116,7 +117,7 @@ BOOST_AUTO_TEST_CASE(collect_provider_ips_cloudflare_contains_public_ipv4) {
 }
 
 BOOST_AUTO_TEST_CASE(collect_server_entry_ips_literal_and_provider) {
-    ppp::vector<app_config::AppConfiguration::DnsServerEntry> entries;
+    ppp::vector<app_config::DnsServerEntry> entries;
     entries.push_back(MakeConfigEntry("udp", "1.2.3.4:53"));
     entries.push_back(MakeConfigEntry("udp", "cloudflare"));
     entries.push_back(MakeConfigEntry("udp", "203.0.113.10:53", "", "", { "198.51.100.20" }));

@@ -7,7 +7,6 @@
 
 #include <ppp/app/PppApplication.h>
 #include <ppp/app/ConsoleUI.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/Int128.h>
 #include <ppp/io/File.h>
 #include <ppp/tap/ITap.h>
@@ -62,6 +61,12 @@
 
 #include <common/aesni/aes.h>
 #include <common/chnroutes2/chnroutes2.h>
+
+namespace ppp {
+namespace configurations {
+class AppConfiguration;
+}
+}
 
 namespace ppp::app {
 

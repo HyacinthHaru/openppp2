@@ -7,7 +7,7 @@
 
 #include <ppp/net/asio/InternetControlMessageProtocol.h>
 #include <ppp/transmissions/ITransmission.h>
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

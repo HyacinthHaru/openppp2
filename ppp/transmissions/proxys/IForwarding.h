@@ -12,7 +12,8 @@
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/threading/Timer.h>
 #include <ppp/threading/BufferswapAllocator.h>
-#include <ppp/configurations/AppConfiguration.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 #if defined(_WIN32)
 #include <windows/ppp/net/QoSS.h>

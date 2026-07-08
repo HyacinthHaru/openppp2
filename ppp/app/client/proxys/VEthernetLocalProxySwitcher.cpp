@@ -1,4 +1,5 @@
 #include <ppp/app/client/proxys/VEthernetLocalProxySwitcher.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/client/proxys/VEthernetLocalProxyConnection.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/net/Ipep.h>

@@ -1,4 +1,7 @@
 #include <ppp/configurations/AppConfiguration.h>
+
+#include <json/json.h>
+
 #include <ppp/configurations/DnsServerValidation.h>
 #include <ppp/app/ApplicationMode.h>
 #include <ppp/cryptography/Ciphertext.h>

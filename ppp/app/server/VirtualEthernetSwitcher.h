@@ -37,7 +37,7 @@
 #include <ppp/cryptography/Ciphertext.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/transmissions/ITransmission.h>
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/app/protocol/VirtualEthernetPacket.h>
 #include <ppp/app/protocol/VirtualEthernetLogger.h>
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
@@ -821,25 +821,7 @@ namespace ppp {
                  * @note When both `configuration_->websocket.host` and `configuration_->websocket.path`
                  *       are non-empty, they are applied to the new transmission object.
                  */
-                inline                                                  NewWebsocketTransmission(const ContextPtr& context, const std::shared_ptr<boost::asio::ip::tcp::socket>& socket) noexcept {
-                    const ppp::string& host = configuration_->websocket.host;
-                    const ppp::string& path = configuration_->websocket.path;
-
-                    ppp::threading::Executors::StrandPtr strand;
-                    auto transmission = make_shared_object<TTransmission>(context, strand, socket, configuration_);
-                    if (NULLPTR == transmission) {
-                        return NULLPTR;
-                    }
-
-                    /**
-                     * @brief Applies configured websocket host/path only when both are present.
-                     */
-                    if (!host.empty() && !path.empty()) {
-                        transmission->Host = host;
-                        transmission->Path = path;
-                    }
-                    return transmission;
-                }
+                                                                        NewWebsocketTransmission(const ContextPtr& context, const std::shared_ptr<boost::asio::ip::tcp::socket>& socket) noexcept;
 
             private:
                 SynchronizedObject                                      syncobj_;           ///< Mutex guarding all shared mutable tables.

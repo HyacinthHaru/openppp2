@@ -11,11 +11,14 @@
  *
  *          This facade never allocates, never throws, and never blocks on
  *          the hot path when telemetry is disabled at runtime.
+ *
+ *          Callers that only need Log/Count/Gauge/Histogram should include
+ *          TelemetryFwd.h instead to avoid pulling in SpanScope and config API.
  */
 
-#include <cstdint>
+#include <ppp/diagnostics/TelemetryFwd.h>
+
 #include <cstdarg>
-#include <cstddef>
 
 /* Always compiled — kept for any external code that checks the macro. */
 #ifndef PPP_TELEMETRY
@@ -24,16 +27,6 @@
 
 namespace ppp {
     namespace telemetry {
-
-        /**
-         * @brief Telemetry verbosity levels.
-         */
-        enum class Level : uint8_t {
-            kInfo   = 0, ///< Startup, major state changes (least verbose).
-            kVerb   = 1, ///< Branch decisions, policy hits.
-            kDebug  = 2, ///< Handshake, mux, transit tun details.
-            kTrace  = 3, ///< Per-packet or per-event (most verbose, highest cost).
-        };
 
         struct Attribute final {
             const char* key;
@@ -67,11 +60,7 @@ namespace ppp {
             bool                                                          active_         = false;
         };
 
-        void Log(Level level, const char* component, const char* fmt, ...) noexcept;
         void LogWithAttributes(Level level, const char* component, const Attribute* attrs, size_t attr_count, const char* fmt, ...) noexcept;
-        void Count(const char* metric, int64_t delta) noexcept;
-        void Gauge(const char* metric, int64_t value) noexcept;
-        void Histogram(const char* metric, int64_t value) noexcept;
         void TraceSpan(const char* name, const char* session_id) noexcept;
         void SetEnabled(bool enabled) noexcept;
         void SetCountEnabled(bool enabled) noexcept;

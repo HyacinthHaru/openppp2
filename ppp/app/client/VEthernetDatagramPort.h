@@ -34,7 +34,6 @@
  * the GNU General Public License v3.0 (GPL-3.0).
  */
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/threading/Executors.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/transmissions/ITransmission.h>
@@ -42,6 +41,8 @@
 #if defined(_ANDROID)
 #include <linux/ppp/net/ProtectorNetwork.h>
 #endif
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

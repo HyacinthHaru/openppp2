@@ -1,4 +1,5 @@
 #include <ppp/ipv6/IPv6Auxiliary.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/diagnostics/Error.h>
 
 /**

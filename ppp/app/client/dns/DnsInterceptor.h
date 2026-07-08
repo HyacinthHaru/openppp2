@@ -9,11 +9,11 @@
 #include <ppp/app/client/dns/DnsRedirectPlan.h>
 #include <ppp/app/client/dns/Rule.h>
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/packet/IPFrame.h>
 #include <ppp/net/packet/UdpFrame.h>
 #include <ppp/stdafx.h>
 
+namespace ppp { namespace configurations { class AppConfiguration; } }
 namespace ppp { namespace dns { class DnsResolver; } }
 
 #if defined(_LINUX)

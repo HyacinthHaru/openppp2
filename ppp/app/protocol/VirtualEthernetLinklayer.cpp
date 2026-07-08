@@ -6,6 +6,7 @@
  */
 
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/io/Stream.h>
 #include <ppp/io/BinaryReader.h>

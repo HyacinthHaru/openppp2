@@ -1,4 +1,5 @@
 #include <ppp/app/server/VirtualInternetControlMessageProtocolStatic.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
 #include <ppp/app/server/VirtualEthernetExchanger.h>
 #include <ppp/app/protocol/VirtualEthernetPacket.h>

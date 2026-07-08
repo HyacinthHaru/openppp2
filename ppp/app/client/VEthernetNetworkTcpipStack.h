@@ -12,7 +12,8 @@
 
 #include <ppp/ethernet/VEthernet.h>
 #include <ppp/ethernet/VNetstack.h>
-#include <ppp/configurations/AppConfiguration.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

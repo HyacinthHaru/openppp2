@@ -1,4 +1,5 @@
 #include <ppp/transmissions/proxys/IForwarding.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/diagnostics/Error.h>
 
 /**

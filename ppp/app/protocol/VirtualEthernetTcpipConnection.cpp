@@ -1,4 +1,5 @@
 #include <ppp/app/protocol/VirtualEthernetTcpipConnection.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/protocol/templates/TVEthernetTcpipConnection.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/Socket.h>

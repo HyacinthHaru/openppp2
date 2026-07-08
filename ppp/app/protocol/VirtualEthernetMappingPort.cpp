@@ -406,6 +406,17 @@ namespace ppp {
                 Update();                                 // Set initial timeout
             }
 
+            /** @brief Refreshes timeout deadline based on connection stage. */
+            void VirtualEthernetMappingPort::Server::Connection::Update() noexcept {
+                UInt64 now = ppp::threading::Executors::GetTickCount();
+                if (connection_stated_.load() < 3) {
+                    timeout_ = now + (UInt64)configuration_->tcp.connect.timeout * 1000;
+                }
+                else {
+                    timeout_ = now + (UInt64)configuration_->tcp.inactive.timeout * 1000;
+                }
+            }
+
             /** @brief Destroys server connection and finalizes resources. */
             VirtualEthernetMappingPort::Server::Connection::~Connection() noexcept {
                 Finalize(false);                           // Clean up without sending disconnect
@@ -1021,6 +1032,17 @@ namespace ppp {
                 Update();                                 // Set initial timeout
             }
 
+            /** @brief Refreshes timeout deadline based on connection stage. */
+            void VirtualEthernetMappingPort::Client::Connection::Update() noexcept {
+                UInt64 now = ppp::threading::Executors::GetTickCount();
+                if (connection_stated_.load() < 3) {
+                    timeout_ = now + (UInt64)configuration_->tcp.connect.timeout * 1000;
+                }
+                else {
+                    timeout_ = now + (UInt64)configuration_->tcp.inactive.timeout * 1000;
+                }
+            }
+
             /** @brief Destroys client-side connection and finalizes resources. */
             VirtualEthernetMappingPort::Client::Connection::~Connection() noexcept {
                 Finalize(false);
@@ -1424,6 +1446,12 @@ namespace ppp {
                 nat_ep_ = natEP;                           // Store NAT endpoint
                 buffer_chunked_ = ppp::threading::Executors::GetCachedBuffer(mapping_port->context_);   // Allocate buffer
                 Update();                                  // Set initial timeout
+            }
+
+            /** @brief Refreshes inactive timeout deadline. */
+            void VirtualEthernetMappingPort::Client::DatagramPort::Update() noexcept {
+                UInt64 now = ppp::threading::Executors::GetTickCount();
+                timeout_ = now + (UInt64)configuration_->udp.inactive.timeout * 1000;
             }
 
             /** @brief Destroys datagram relay port and releases socket resources. */

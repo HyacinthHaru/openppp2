@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/threading/Executors.h>
 #include <ppp/coroutines/YieldContext.h>
 
@@ -16,6 +15,9 @@
 #endif
 
 namespace ppp {
+    namespace configurations {
+        class AppConfiguration;
+    }
     namespace net {
         namespace rinetd {
             /**

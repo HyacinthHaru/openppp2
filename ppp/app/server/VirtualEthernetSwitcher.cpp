@@ -1,4 +1,5 @@
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/server/VirtualEthernetExchanger.h>
 #include <ppp/app/server/VirtualEthernetNetworkTcpipConnection.h>
 #include <ppp/app/server/VirtualEthernetManagedServer.h>
@@ -20,7 +21,8 @@
 #include <ppp/ipv6/IPv6Auxiliary.h>
 #include <ppp/ipv6/IPv6Packet.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
+#include <ppp/diagnostics/Telemetry.h> /* SpanScope RAII */
 
 #include <openssl/rand.h>
 #include <chrono>
@@ -2971,6 +2973,25 @@ namespace ppp {
              * @param socket Accepted TCP socket.
              * @return Constructed transmission instance or null.
              */
+            template <typename TTransmission>
+            typename std::enable_if<std::is_base_of<VirtualEthernetSwitcher::ITransmission, TTransmission>::value, std::shared_ptr<TTransmission>>::type
+            VirtualEthernetSwitcher::NewWebsocketTransmission(const ContextPtr& context, const std::shared_ptr<boost::asio::ip::tcp::socket>& socket) noexcept {
+                const ppp::string& host = configuration_->websocket.host;
+                const ppp::string& path = configuration_->websocket.path;
+
+                ppp::threading::Executors::StrandPtr strand;
+                auto transmission = make_shared_object<TTransmission>(context, strand, socket, configuration_);
+                if (NULLPTR == transmission) {
+                    return NULLPTR;
+                }
+
+                if (!host.empty() && !path.empty()) {
+                    transmission->Host = host;
+                    transmission->Path = path;
+                }
+                return transmission;
+            }
+
             VirtualEthernetSwitcher::ITransmissionPtr VirtualEthernetSwitcher::Accept(int categories, const ContextPtr& context, const std::shared_ptr<boost::asio::ip::tcp::socket>& socket) noexcept {
                 if (NULLPTR == context || NULLPTR == socket) {
                     return NULLPTR;

@@ -1,10 +1,11 @@
 #include <ppp/app/client/GeoRuleGenerator.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/io/File.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/net/http/HttpClient.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/hash/hash_bytes.h>
 

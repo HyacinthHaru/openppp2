@@ -3,6 +3,7 @@
  * @brief Network interface defaults and dynamic IP-list update helpers.
  */
 
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/diagnostics/Error.h>
 

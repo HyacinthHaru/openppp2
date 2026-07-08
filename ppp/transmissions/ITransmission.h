@@ -11,8 +11,9 @@
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/threading/Timer.h>
 #include <ppp/threading/BufferswapAllocator.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/asio/IAsynchronousWriteIoQueue.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/transmissions/ITransmissionQoS.h>
 #include <ppp/transmissions/ITransmissionStatistics.h>
 

@@ -1,4 +1,5 @@
 #include <ppp/app/protocol/VirtualEthernetPacket.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/io/MemoryStream.h>
 #include <ppp/net/Socket.h>
 #include <ppp/net/IPEndPoint.h>

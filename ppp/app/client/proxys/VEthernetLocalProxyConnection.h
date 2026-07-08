@@ -7,7 +7,6 @@
  * @license GPL-3.0
  */
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/threading/Executors.h>
 #include <ppp/coroutines/YieldContext.h>
@@ -24,6 +23,8 @@
 #include <ppp/app/mux/vmux_skt.h>
 
 #include <atomic>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

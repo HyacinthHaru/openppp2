@@ -7,8 +7,9 @@
  */
 
 #include <ppp/stdafx.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/asio/IAsynchronousWriteIoQueue.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/net/asio/asio.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/net/Socket.h>

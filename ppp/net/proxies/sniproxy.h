@@ -24,9 +24,11 @@
 #include <ppp/io/MemoryStream.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/threading/Timer.h>
-#include <ppp/configurations/AppConfiguration.h>
 
 namespace ppp {
+    namespace configurations {
+        class AppConfiguration;
+    }
     namespace net {
         namespace proxies {
 

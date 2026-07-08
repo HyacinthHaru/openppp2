@@ -40,7 +40,7 @@
 
 #include <ppp/Int128.h>
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/threading/Timer.h>
@@ -225,8 +225,8 @@ namespace ppp {
                  */
                 VirtualEthernetManagedServer(const std::shared_ptr<VirtualEthernetSwitcher>& switcher) noexcept;
 
-                /** @brief Default destructor; all cleanup is handled by `Dispose()`. */
-                virtual ~VirtualEthernetManagedServer() = default;
+                /** @brief Destructor; defined in .cpp for shared_ptr member cleanup. */
+                virtual ~VirtualEthernetManagedServer() noexcept;
 
             public:
                 /** @brief Returns a shared self-reference via `shared_from_this()`. */

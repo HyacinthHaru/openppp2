@@ -1,5 +1,6 @@
 #include "DnsInterceptor.h"
 
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/client/dns/DnsReachability.h>

@@ -7,9 +7,11 @@
 
 #include <ppp/stdafx.h>
 #include <ppp/tap/ITap.h>
-#include <ppp/configurations/AppConfiguration.h>
 
 namespace ppp {
+    namespace configurations {
+        class AppConfiguration;
+    }
     namespace ipv6 {
         namespace auxiliary {
             /**

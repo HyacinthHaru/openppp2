@@ -6,9 +6,13 @@
  */
 
 #include <ppp/app/client/dns/Rule.h>
-#include <ppp/configurations/AppConfiguration.h>
+#include <ppp/configurations/DnsServerEntry.h>
 #include <ppp/dns/DnsResolver.h>
 #include <ppp/stdafx.h>
+
+namespace ppp::configurations {
+    class AppConfiguration;
+}
 
 namespace ppp {
     namespace app {
@@ -18,14 +22,14 @@ namespace ppp {
                 class DnsReachability final {
                 public:
                     static ppp::vector<ppp::dns::ServerEntry> BuildResolverEntries(
-                        const ppp::vector<ppp::configurations::AppConfiguration::DnsServerEntry>& config_entries) noexcept;
+                        const ppp::vector<ppp::configurations::DnsServerEntry>& config_entries) noexcept;
 
                     static void CollectProviderIps(
                         const ppp::string& provider_name,
                         const ppp::function<void(uint32_t)>& add_ip) noexcept;
 
                     static void CollectServerEntryIps(
-                        const ppp::vector<ppp::configurations::AppConfiguration::DnsServerEntry>& entries,
+                        const ppp::vector<ppp::configurations::DnsServerEntry>& entries,
                         const ppp::function<void(uint32_t)>& add_ip) noexcept;
 
                     static void CollectInterceptReachabilityIps(

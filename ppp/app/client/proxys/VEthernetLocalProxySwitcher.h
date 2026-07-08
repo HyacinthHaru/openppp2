@@ -7,7 +7,6 @@
  * @license GPL-3.0
  */
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/SocketAcceptor.h>
 #include <ppp/threading/Timer.h>
 #include <ppp/threading/Executors.h>
@@ -15,6 +14,8 @@
 #include <ppp/threading/BufferswapAllocator.h>
 
 #include <atomic>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

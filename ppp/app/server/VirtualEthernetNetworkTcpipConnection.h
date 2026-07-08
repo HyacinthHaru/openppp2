@@ -5,7 +5,7 @@
  * @brief Declares server-side TCP/IP link handling for a virtual ethernet session.
  */
 
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/threading/Executors.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/transmissions/ITransmission.h>

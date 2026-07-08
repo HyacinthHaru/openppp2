@@ -15,8 +15,9 @@
 #include <ppp/threading/BufferswapAllocator.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/transmissions/ITransmission.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/protocol/VirtualEthernetLogger.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
 #include <ppp/app/protocol/VirtualEthernetMappingPort.h>
 
@@ -162,15 +163,7 @@ namespace ppp {
                         /** @brief Writes data to remote FRP client channel. @param packet Payload pointer. @param packet_size Payload length. @return True on successful transmission write. @note Data path: local user -> remote FRP client. */
                         bool                                                                SendToFrpClient(const void* packet, int packet_size) noexcept;
                         /** @brief Refreshes timeout deadline based on connection stage. @return void. @note Uses connect timeout before active state and inactive timeout afterwards. */
-                        void                                                                Update() noexcept {
-                            UInt64 now = ppp::threading::Executors::GetTickCount();
-                            if (connection_stated_.load() < 3) {
-                                timeout_ = now + (UInt64)configuration_->tcp.connect.timeout * 1000;   // connection phase timeout
-                            }
-                            else {
-                                timeout_ = now + (UInt64)configuration_->tcp.inactive.timeout * 1000;  // established phase timeout
-                            }
-                        }
+                        void                                                                Update() noexcept;
                         /** @brief Checks whether connection is expired. @param now Current tick count. @return True when disposed stage reached or timeout elapsed. @note Lightweight state check. */
                         bool                                                                IsPortAging(UInt64 now) noexcept { return connection_stated_.load() > 3 || now >= timeout_; }
 
@@ -236,15 +229,7 @@ namespace ppp {
                         /** @brief Connects to local destination service. @return True when connect flow starts/succeeds. @note Called after FRP connect request arrives. */
                         bool                                                                ConnectToDestinationServer() noexcept;
                         /** @brief Refreshes timeout deadline based on connection stage. @return void. @note Uses connect timeout before active state and inactive timeout afterwards. */
-                        void                                                                Update() noexcept {
-                            UInt64 now = ppp::threading::Executors::GetTickCount();
-                            if (connection_stated_.load() < 3) {
-                                timeout_ = now + (UInt64)configuration_->tcp.connect.timeout * 1000;
-                            }
-                            else {
-                                timeout_ = now + (UInt64)configuration_->tcp.inactive.timeout * 1000;
-                            }
-                        }
+                        void                                                                Update() noexcept;
                         /** @brief Checks whether connection is expired. @param now Current tick count. @return True when disposed stage reached or timeout elapsed. @note Lightweight state check. */
                         bool                                                                IsPortAging(UInt64 now) noexcept { return connection_stated_.load() > 3 || now >= timeout_; }
                         /** @brief Disposes this connection. @return void. @note Delegates to `Finalize(false)`. */
@@ -295,10 +280,7 @@ namespace ppp {
                         /** @brief Sends UDP payload to peer/local destination path. @param packet Payload pointer. @param packet_length Payload length. @param sourceEP Source endpoint metadata. @return True on successful send dispatch. @note Direction depends on caller side. */
                         bool                                                                SendTo(const void* packet, int packet_length, const boost::asio::ip::udp::endpoint& sourceEP) noexcept;
                         /** @brief Refreshes inactive timeout deadline. @return void. @note Uses UDP inactive timeout from configuration. */
-                        void                                                                Update() noexcept {
-                            UInt64 now = ppp::threading::Executors::GetTickCount();
-                            timeout_ = now + (UInt64)configuration_->udp.inactive.timeout * 1000;
-                        }
+                        void                                                                Update() noexcept;
                         /** @brief Opens UDP socket and starts receive loop. @return True on success. @note Socket bind/open mode follows endpoint protocol family. */
                         bool                                                                Open() noexcept;
                         /** @brief Checks whether datagram port is expired. @param now Current tick count. @return True when disposed or timeout elapsed. @note Lightweight state check. */

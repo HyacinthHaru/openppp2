@@ -7,8 +7,9 @@
  * @license ("GPL-3.0")
  */
 
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/coroutines/YieldContext.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/net/Firewall.h>
 #include <ppp/transmissions/ITransmission.h>
 #include <ppp/app/protocol/VirtualEthernetLogger.h>

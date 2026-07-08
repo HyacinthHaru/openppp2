@@ -2,8 +2,11 @@
 
 #include <ppp/stdafx.h>
 #include <ppp/threading/BufferswapAllocator.h>
+#include <ppp/configurations/DnsServerEntry.h>
 
-#include <json/json.h>
+namespace Json {
+    class Value;
+}
 
 /**
  * @file AppConfiguration.h
@@ -17,6 +20,8 @@ namespace ppp {
          */
         class AppConfiguration final {
         public:
+            using DnsServerEntry = configurations::DnsServerEntry;
+
             /**
              * @brief Port mapping rule configuration.
              *
@@ -57,22 +62,6 @@ namespace ppp {
                 ppp::string                                                 network; ///< Prefix network, e.g. "10.0.0.0".
                 int                                                         prefix = 0; ///< Prefix length, e.g. 24.
                 ppp::string                                                 via;     ///< Gateway peer virtual IPv4, e.g. "10.1.0.2"; empty for announce-only.
-            };
-
-            /**
-             * @brief Structured DNS server entry with multi-protocol metadata.
-             *
-             * Describes a single upstream DNS server with its connection
-             * parameters.  Supports plain UDP/TCP, DoH, and DoT protocols.
-             * DoQ is normalized to DoT at parse time since the resolver does
-             * not yet implement QUIC transport.
-             */
-            struct DnsServerEntry final {
-                ppp::string                                         protocol;   ///< Transport protocol: "doh", "dot", "udp", "tcp". DoQ is auto-normalized to "dot".
-                ppp::string                                         url;        ///< Full URL for DoH endpoints (e.g. "https://dns.google/dns-query").
-                ppp::string                                         hostname;   ///< TLS server name / hostname for certificate verification (DoT/DoH).
-                ppp::string                                         address;    ///< IP:port address literal (e.g. "1.1.1.1:853", "8.8.8.8:53").
-                ppp::vector<ppp::string>                            bootstrap;  ///< Bootstrap DNS servers used to resolve the hostname before connecting.
             };
 
             /**

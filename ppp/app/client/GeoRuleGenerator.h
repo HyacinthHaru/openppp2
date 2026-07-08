@@ -32,7 +32,8 @@
  */
 
 #include <ppp/stdafx.h>
-#include <ppp/configurations/AppConfiguration.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 
 namespace ppp {
     namespace app {

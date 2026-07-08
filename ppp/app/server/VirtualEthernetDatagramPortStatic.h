@@ -5,7 +5,7 @@
  * @brief Static-echo UDP relay port used for stateless datagram forwarding.
  */
 
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/threading/Executors.h>
 #include <ppp/transmissions/ITransmission.h>
 
@@ -131,15 +131,7 @@ namespace ppp {
                 /**
                  * @brief Refreshes timeout according to DNS-only or inactive policy.
                  */
-                void                                                    Update() noexcept {
-                    UInt64 now = Executors::GetTickCount();
-                    if (onlydns_) {
-                        timeout_ = now + (UInt64)configuration_->udp.dns.timeout * 1000;
-                    }
-                    else {
-                        timeout_ = now + (UInt64)configuration_->udp.inactive.timeout * 1000;
-                    }
-                }
+                void                                                    Update() noexcept;
                 /**
                  * @brief Outputs payload using the instance source IP/port.
                  * @param messages Payload pointer.

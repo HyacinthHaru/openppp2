@@ -35,7 +35,7 @@
  *            parent `VirtualEthernetExchanger`.  No explicit locking is required.
  */
 
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/threading/Executors.h>
 #include <ppp/transmissions/ITransmission.h>
 
@@ -196,15 +196,7 @@ namespace ppp {
                  *          are in seconds and are converted to milliseconds relative to the
                  *          current tick count.
                  */
-                void                                                    Update() noexcept {
-                    UInt64 now = Executors::GetTickCount();
-                    if (onlydns_) {
-                        timeout_ = now + (UInt64)configuration_->udp.dns.timeout * 1000;
-                    }
-                    else {
-                        timeout_ = now + (UInt64)configuration_->udp.inactive.timeout * 1000;
-                    }
-                }
+                void                                                    Update() noexcept;
 
                 /**
                  * @brief Marks this port as externally finalized by the GC sweep.

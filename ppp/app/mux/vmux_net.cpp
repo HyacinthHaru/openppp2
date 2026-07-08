@@ -1,6 +1,7 @@
 #include "vmux.h"
 #include "vmux_net.h"
 #include "vmux_skt.h"
+#include <ppp/configurations/AppConfiguration.h>
 #include <chrono>
 #include <openssl/crypto.h>
 #include <ppp/diagnostics/Error.h>

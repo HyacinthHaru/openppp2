@@ -1,3 +1,4 @@
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/diagnostics/Error.h>
 #include <ppp/diagnostics/Telemetry.h>

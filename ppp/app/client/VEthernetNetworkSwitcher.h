@@ -31,7 +31,8 @@
  * Licensed under GPL-3.0.
  */
 
-#include <ppp/configurations/AppConfiguration.h>
+namespace ppp::configurations { class AppConfiguration; }
+
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/ipv6/IPv6Auxiliary.h>

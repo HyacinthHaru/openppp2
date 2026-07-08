@@ -2,6 +2,7 @@
 
 #include "DnsReachabilityParse.h"
 #include <ppp/app/client/dns/Rule.h>
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/dns/DnsProviderCatalog.h>
 #include <ppp/net/Ipep.h>
 #include <ppp/net/IPEndPoint.h>
@@ -12,7 +13,7 @@ namespace ppp {
             namespace dns {
 
                 static ppp::dns::ServerEntry DnsServerEntryToResolverEntry(
-                    const ppp::configurations::AppConfiguration::DnsServerEntry& ce) noexcept {
+                    const ppp::configurations::DnsServerEntry& ce) noexcept {
 
                     ppp::dns::ServerEntry se;
                     ppp::string proto = ce.protocol;
@@ -45,7 +46,7 @@ namespace ppp {
                 }
 
                 ppp::vector<ppp::dns::ServerEntry> DnsReachability::BuildResolverEntries(
-                    const ppp::vector<ppp::configurations::AppConfiguration::DnsServerEntry>& config_entries) noexcept {
+                    const ppp::vector<ppp::configurations::DnsServerEntry>& config_entries) noexcept {
 
                     ppp::vector<ppp::dns::ServerEntry> result;
                     result.reserve(config_entries.size());
@@ -88,7 +89,7 @@ namespace ppp {
                 }
 
                 void DnsReachability::CollectServerEntryIps(
-                    const ppp::vector<ppp::configurations::AppConfiguration::DnsServerEntry>& entries,
+                    const ppp::vector<ppp::configurations::DnsServerEntry>& entries,
                     const ppp::function<void(uint32_t)>& add_ip) noexcept {
 
                     if (!add_ip) {

@@ -10,8 +10,9 @@
 #include <ppp/stdafx.h>
 #include <ppp/Int128.h>
 #include <ppp/cryptography/Ciphertext.h>
-#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/net/packet/IPFrame.h>
+
+namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/net/packet/UdpFrame.h>
 #include <ppp/net/packet/IcmpFrame.h>
 

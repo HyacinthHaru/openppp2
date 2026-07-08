@@ -1,5 +1,6 @@
 #include "vmux_skt.h"
 #include "vmux_net.h"
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/diagnostics/Error.h>
 
 /**

@@ -3,6 +3,7 @@
  * @brief Version formatting and command-line help text rendering.
  */
 
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/PppApplicationInternal.h>
 
 namespace ppp::app {

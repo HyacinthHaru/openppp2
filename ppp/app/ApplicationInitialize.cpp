@@ -3,6 +3,7 @@
  * @brief Startup, teardown, and runtime preflight routines for the PPP application.
  */
 
+#include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/PppApplicationInternal.h>
 #include <ppp/app/client/GeoRuleGenerator.h>
 #include <ppp/diagnostics/Error.h>
