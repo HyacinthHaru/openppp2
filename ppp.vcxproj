@@ -435,6 +435,10 @@
     <ClCompile Include="ppp\app\client\ClientConnectionOpener.cpp" />
     <ClCompile Include="ppp\app\client\ClientPacketDispatchHandler.cpp" />
     <ClCompile Include="ppp\app\client\RouteTableManager.cpp" />
+    <ClCompile Include="ppp\app\client\RouteTableManager_mobile.cpp" />
+    <ClCompile Include="ppp\app\client\RouteTableManager_win32.cpp" />
+    <ClCompile Include="ppp\app\client\RouteTableManager_darwin.cpp" />
+    <ClCompile Include="ppp\app\client\RouteTableManager_linux.cpp" />
     <ClCompile Include="ppp\app\client\ClientNetworkInterfaceResolver.cpp" />
     <ClCompile Include="ppp\app\client\QuicRejectRateLimiter.cpp" />
     <ClCompile Include="ppp\app\client\VEthernetDatagramPort.cpp" />
