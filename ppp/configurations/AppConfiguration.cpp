@@ -406,6 +406,8 @@ namespace ppp {
             config.dns.ecs.override_ip = "";
             config.dns.tls.verify_peer = true;
             config.dns.stun.candidates.clear();
+            config.dns.fake_ip.enabled = false;
+            config.dns.fake_ip.range = "198.18.0.1/16";
 
             config.geo_rules.enabled = false;
             config.geo_rules.country = "cn";
@@ -1856,6 +1858,14 @@ namespace ppp {
                 }
             }
 
+            AssignBoolIfPresent(config.dns.fake_ip.enabled, json["dns"]["fake-ip"]["enabled"]);
+            {
+                ppp::string range = LTrim(RTrim(JsonAuxiliary::AsValue<ppp::string>(json["dns"]["fake-ip"]["range"])));
+                if (!range.empty()) {
+                    config.dns.fake_ip.range = std::move(range);
+                }
+            }
+
             // Geo-rules configuration (Phase G).
             // geoip/geosite accept string or string[].
             // append-bypass/append-dns-rules accept string[].
@@ -2231,6 +2241,8 @@ namespace ppp {
             dns["ecs"]["enabled"] = config.dns.ecs.enabled;
             dns["ecs"]["override-ip"] = config.dns.ecs.override_ip;
             dns["tls"]["verify-peer"] = config.dns.tls.verify_peer;
+            dns["fake-ip"]["enabled"] = config.dns.fake_ip.enabled;
+            dns["fake-ip"]["range"] = config.dns.fake_ip.range;
             if (!config.dns.stun.candidates.empty()) {
                 Json::Value stun_cands(Json::arrayValue);
                 for (const ppp::string& c : config.dns.stun.candidates) {

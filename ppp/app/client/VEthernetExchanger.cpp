@@ -57,10 +57,17 @@ namespace ppp {
             /** @brief Maximum keepalive echo interval in milliseconds. */
             static constexpr int SEND_ECHO_KEEP_ALIVE_PACKET_MAX_TIMEOUT = 5000;
             /** @brief Hard timeout threshold before keepalive is considered stale. */
+#if defined(_IPHONE) || defined(_ANDROID)
+            // Mobile OS may freeze the VPN process in background; use a longer
+            // stale threshold so a Doze wake does not immediately dispose the
+            // main transmission (iOS Packet Tunnel already relied on 120s).
+            static constexpr int SEND_ECHO_KEEP_ALIVE_PACKET_MMX_TIMEOUT = 120000;
+#else
+            static constexpr int SEND_ECHO_KEEP_ALIVE_PACKET_MMX_TIMEOUT = SEND_ECHO_KEEP_ALIVE_PACKET_MAX_TIMEOUT << 2;
+#endif
 #if defined(_IPHONE)
             // Under ctcp load the io_context may not service the main transmission read
             // loop for tens of seconds while hundreds of per-flow handshakes run.
-            static constexpr int SEND_ECHO_KEEP_ALIVE_PACKET_MMX_TIMEOUT = 120000;
             // mux=0 opens one server TCP+handshake per TUN flow; cap to stay inside NE memory.
             static constexpr int IOS_CHILD_TRANSMISSION_LIMIT = 96;
             // Soft mark for telemetry only; uploads can legitimately queue above this.
@@ -69,8 +76,6 @@ namespace ppp {
             static constexpr int IOS_CHILD_CONNECT_WAITER_BURST_LIMIT = 192;
             static constexpr int IOS_CHILD_SLOT_WAIT_INTERVAL_MS = 25;
             static constexpr int IOS_CHILD_SLOT_WAIT_MAX_MS = 15000;
-#else
-            static constexpr int SEND_ECHO_KEEP_ALIVE_PACKET_MMX_TIMEOUT = SEND_ECHO_KEEP_ALIVE_PACKET_MAX_TIMEOUT << 2;
 #endif
             const char* TransmissionRoleName(ppp::transmissions::TcpTransmissionRole role) noexcept {
                 switch (role) {

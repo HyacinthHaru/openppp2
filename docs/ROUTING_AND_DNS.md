@@ -58,7 +58,7 @@ The server continues the DNS path by:
 
 ## Client-Side Ownership
 
-`VEthernetNetworkSwitcher` owns the client-side route and DNS state.
+`VEthernetNetworkSwitcher` owns client-side routing; DNS interception lives in `dns::DnsInterceptor`, which the switcher delegates to.
 
 ### Route Information Base
 
@@ -71,12 +71,12 @@ The server continues the DNS path by:
 
 ### DNS State
 
-| Field | Description |
-|-------|-------------|
-| `dns_rules_` | DNS rules (domain → resolver mapping) |
-| `dns_serverss_` | DNS server route assignments |
+| Field / object | Description |
+|----------------|-------------|
+| `dns_interceptor_` | DNS orchestrator (rules, resolver, fake-ip pool) |
+| `dns_serverss_` | DNS / provider reachability routes (tunnel vs NIC bypass) |
 
-Source: `ppp/app/client/VEthernetNetworkSwitcher.h`
+`RedirectDnsServer()` keeps the same signature and calls `dns_interceptor_->HandleQuery()`. See [DNS_MODULE_DESIGN.md](DNS_MODULE_DESIGN.md).
 
 ---
 
@@ -148,25 +148,24 @@ Source: `ppp/app/client/VEthernetNetworkSwitcher.h`
 
 ## DNS Rules
 
-Client DNS rules decide which resolver to use for a domain or domain pattern.
+Client DNS rules decide which resolver to use for a domain or domain pattern. The full intercepted pipeline is documented in [DNS_MODULE_DESIGN.md](DNS_MODULE_DESIGN.md).
 
 ### Rule Matching
 
 ```mermaid
 flowchart TD
-    A[DNS query for domain X] --> B[Check dns_rules_]
-    B --> C{Rule match?}
-    C -->|suffix match| D[Use resolver from rule]
-    C -->|wildcard match| D
-    C -->|exact match| D
-    C -->|no match| E[Use default resolver]
-    D --> F{Resolver reachable?}
-    F -->|yes| G[Send query to matched resolver]
-    F -->|no| E
+    A[UDP:53 on TUN] --> B[vdns cache]
+    B -->|miss| C[DnsRedirectPlan::Decide]
+    C --> D{rule / gateway / unmatched}
+    D -->|provider| E[DnsResolver DoH/DoT/TCP/UDP]
+    D -->|legacy IP| F[DnsUdpRelay]
+    D -->|unmatched + intercept| E
+    D -->|fake-ip A query| G[FakeIpPool instant fake A]
+    G --> H[background real resolve]
+    E --> I[DnsResponseHandler inject TUN]
+    F --> I
+    I -->|fail| J[tunnel fallback SendTo]
 ```
-
-The resolver decision is tied to route reachability:
-a rule is only useful if the path to the resolver is actually available.
 
 ### DNS Rule Format
 
@@ -375,6 +374,8 @@ Routing and DNS are not separate knobs. They form a unified traffic classificati
 | `dns.servers.domestic` | `doh.pub` | Default domestic provider or structured DNS server spec |
 | `dns.servers.foreign` | `cloudflare` | Default foreign provider or structured DNS server spec |
 | `dns.intercept-unmatched` | `true` | Intercept unmatched DNS queries and resolve through `foreign -> domestic -> cloudflare` |
+| `dns.fake-ip.enabled` | `false` | Clash-style fake-ip (instant fake A, background real resolve) |
+| `dns.fake-ip.range` | `198.18.0.1/16` | Fake-ip pool CIDR |
 
 ---
 

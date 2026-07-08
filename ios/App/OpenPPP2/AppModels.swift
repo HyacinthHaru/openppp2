@@ -37,6 +37,8 @@ struct LaunchOptions: Codable, Equatable {
     var dnsDomestic: String = "doh.pub"
     var dnsForeign: String = "cloudflare"
     var dnsInterceptUnmatched: Bool = true
+    var dnsFakeIpEnabled: Bool = false
+    var dnsFakeIpRange: String = "198.18.0.1/16"
     var dnsEcsEnabled: Bool = true
     var dnsEcsOverrideIp: String = ""
     var dnsTlsVerifyPeer: Bool = true
@@ -73,6 +75,8 @@ struct LaunchOptions: Codable, Equatable {
         case dnsDomestic
         case dnsForeign
         case dnsInterceptUnmatched
+        case dnsFakeIpEnabled
+        case dnsFakeIpRange
         case dnsEcsEnabled
         case dnsEcsOverrideIp
         case dnsTlsVerifyPeer
@@ -110,6 +114,8 @@ struct LaunchOptions: Codable, Equatable {
         dnsDomestic = try container.decodeIfPresent(String.self, forKey: .dnsDomestic) ?? defaults.dnsDomestic
         dnsForeign = try container.decodeIfPresent(String.self, forKey: .dnsForeign) ?? defaults.dnsForeign
         dnsInterceptUnmatched = try container.decodeIfPresent(Bool.self, forKey: .dnsInterceptUnmatched) ?? defaults.dnsInterceptUnmatched
+        dnsFakeIpEnabled = try container.decodeIfPresent(Bool.self, forKey: .dnsFakeIpEnabled) ?? defaults.dnsFakeIpEnabled
+        dnsFakeIpRange = try container.decodeIfPresent(String.self, forKey: .dnsFakeIpRange) ?? defaults.dnsFakeIpRange
         dnsEcsEnabled = try container.decodeIfPresent(Bool.self, forKey: .dnsEcsEnabled) ?? defaults.dnsEcsEnabled
         dnsEcsOverrideIp = try container.decodeIfPresent(String.self, forKey: .dnsEcsOverrideIp) ?? defaults.dnsEcsOverrideIp
         dnsTlsVerifyPeer = try container.decodeIfPresent(Bool.self, forKey: .dnsTlsVerifyPeer) ?? defaults.dnsTlsVerifyPeer

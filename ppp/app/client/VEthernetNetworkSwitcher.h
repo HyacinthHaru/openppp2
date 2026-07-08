@@ -46,6 +46,7 @@
 #include <ppp/app/protocol/VirtualEthernetLinklayer.h>
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
 #include <ppp/app/client/dns/Rule.h>
+#include <ppp/app/client/dns/DnsInterceptor.h>
 #include <ppp/app/client/proxys/VEthernetHttpProxySwitcher.h>
 #include <ppp/app/client/proxys/VEthernetSocksProxySwitcher.h>
 
@@ -66,6 +67,11 @@ namespace ppp {
         namespace client {
             class VEthernetExchanger;
             class VEthernetDatagramPort;
+
+            namespace dns {
+                class DnsResponseHandler;
+                class DnsUdpRelay;
+            }
 
             /**
              * @brief Top-level client runtime that coordinates the TAP interface, remote session,
@@ -96,6 +102,8 @@ namespace ppp {
             private:
                 friend class                                                        VEthernetExchanger;
                 friend class                                                        VEthernetDatagramPort;
+                friend class                                                        dns::DnsResponseHandler;
+                friend class                                                        dns::DnsUdpRelay;
 
             private:
                 /**
@@ -684,6 +692,11 @@ namespace ppp {
                  */
                 virtual bool                                                        DatagramOutput(const boost::asio::ip::udp::endpoint& sourceEP, const boost::asio::ip::udp::endpoint& destinationEP, void* packet, int packet_size, bool caching = true) noexcept;
 
+                /**
+                 * @brief Rewrites a fake-ip destination to its resolved real IPv4 when known.
+                 */
+                boost::asio::ip::address                                            RewriteFakeIpAddress(const boost::asio::ip::address& addr) const noexcept;
+
             protected:
 #if !defined(_ANDROID) && !defined(_IPHONE)
                 /**
@@ -780,48 +793,6 @@ namespace ppp {
                  * @return true if the DNS packet was redirected; false to forward normally.
                  */
                 bool                                                                RedirectDnsServer(const std::shared_ptr<VEthernetExchanger>& exchanger, const std::shared_ptr<IPFrame>& packet, const std::shared_ptr<UdpFrame>& frame, const std::shared_ptr<ppp::net::packet::BufferSegment>& messages) noexcept;
-
-                /**
-                 * @brief Hardened DnsResolver response handler used by RedirectDnsServer().
-                 *
-                 * Centralised entry point that injects a non-empty response into the
-                 * TUN via DatagramOutput(), or falls back to forwarding the original
-                 * query through the VPN tunnel via VEthernetExchanger::SendTo() when
-                 * DnsResolver fails or injection cannot complete.  Always exception
-                 * safe; emits dns.redirect.{success,fallback,dropped,exception}
-                 * telemetry counters.
-                 */
-                static void                                                         HandleDnsResolverResponse(
-                    const std::shared_ptr<VEthernetNetworkSwitcher>&                self,
-                    const std::shared_ptr<VEthernetExchanger>&                      exchanger,
-                    const std::shared_ptr<ppp::net::packet::BufferSegment>&         messages,
-                    const boost::asio::ip::udp::endpoint&                           sourceEP,
-                    const boost::asio::ip::udp::endpoint&                           destEP,
-                    ppp::vector<Byte>                                               response) noexcept;
-
-                /**
-                 * @brief Coroutine implementation of the DNS redirect exchange.
-                 *
-                 * @param y              Coroutine yield context.
-                 * @param socket         Temporary UDP socket used for the redirect query.
-                 * @param buffer         Receive buffer for the DNS response.
-                 * @param serverIP       DNS server IP to forward the query to.
-                 * @param frame          Original UDP frame to extract source/dest endpoints.
-                 * @param messages       Raw DNS query payload.
-                 * @param context        IO context for the async operations.
-                 * @param destinationIP  Original DNS destination IP (for response rewriting).
-                 * @return true if the redirect completed and response was injected.
-                 */
-                bool                                                                RedirectDnsServer(
-                    ppp::coroutines::YieldContext&                                  y,
-                    const std::shared_ptr<boost::asio::ip::udp::socket>&            socket,
-                    const std::shared_ptr<Byte>&                                    buffer,
-                    const boost::asio::ip::address&                                 serverIP,
-                    const std::shared_ptr<VEthernetExchanger>&                      exchanger,
-                    const std::shared_ptr<UdpFrame>&                                frame,
-                    const std::shared_ptr<ppp::net::packet::BufferSegment>&         messages,
-                    const std::shared_ptr<boost::asio::io_context>&                 context,
-                    const boost::asio::ip::address&                                 destinationIP) noexcept;
 
                 /**
                  * @brief Registers a timeout event handler by opaque key.
@@ -1056,8 +1027,8 @@ namespace ppp {
                 VEthernetSocksProxySwitcherPtr                                      socks_proxy_;
                 /** @brief Active timeout event handler table. */
                 TimeoutEventHandlerTable                                            timeouts_;
-                /** @brief Three-tier DNS rule sets: [0]=relative, [1]=full-host, [2]=regexp. */
-                DNSRuleTable                                                        dns_ruless_[3];
+                /** @brief DNS interception, rules, and resolver orchestration. */
+                std::unique_ptr<dns::DnsInterceptor>                                dns_interceptor_;
                 /** @brief Route information base loaded from IP-list files. */
                 RouteInformationTablePtr                                            rib_;
                 /** @brief Forward information base derived from the RIB. */
@@ -1074,8 +1045,6 @@ namespace ppp {
                 std::shared_ptr<aggligator::aggligator>                             aggligator_;
                 /** @brief Optional proxy forwarding helper. */
                 IForwardingPtr                                                      forwarding_;
-                /** @brief Multi-protocol DNS resolver for provider-based rules. */
-                std::shared_ptr<ppp::dns::DnsResolver>                              dns_resolver_;
                 /**
                  * @brief Last received extended server information block.
                  *

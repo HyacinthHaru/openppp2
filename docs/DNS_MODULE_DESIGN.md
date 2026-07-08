@@ -4,6 +4,94 @@
 
 在现有 DNS 拦截/缓存架构上扩展多协议上游支持（UDP / TCP / DoH / DoT），配合 EDNS Client Subnet 优化国内 CDN 解析。当前默认策略面向移动网络：保留旧 IP 规则兼容性，同时默认开启 provider-based full interception，未命中规则按 `foreign -> domestic -> cloudflare` 解析。
 
+## 客户端 DNS 拦截模块（Plan A 重构）
+
+`VEthernetNetworkSwitcher::RedirectDnsServer()` 仍是对外唯一入口，内部委托给 `dns::DnsInterceptor`：
+
+```
+TUN UDP:53 包
+  │
+  ▼
+VEthernetNetworkSwitcher::RedirectDnsServer()   ← 签名不变，~10 行委托
+  │
+  ▼
+dns::DnsInterceptor::HandleQuery()
+  ├─ vdns::QueryCache2() 缓存命中
+  ├─ dns::DnsRedirectPlan::Decide() 纯路由决策
+  ├─ kUdpRelay        → dns::DnsUdpRelay::Spawn()   socket protect + 协程收发
+  ├─ kResolve*        → dns::DnsResolver 异步解析
+  ├─ kDeferToTunnel   → dns::DnsResponseHandler 隧道回退
+  └─ kBlockAAAA/kDrop → 丢弃
+  │
+  ▼
+dns::DnsResponseHandler::HandleResolverResponse()  TUN 注入或隧道转发
+```
+
+| 文件 | 职责 |
+|------|------|
+| `DnsInterceptor.h/cpp` | 生命周期、规则表、`HandleQuery` 编排 |
+| `DnsRedirectPlan.h/cpp` | 纯函数路由决策（可单测） |
+| `DnsReachability.h/cpp` | bypass IP、resolver entries、规则可达性 |
+| `DnsResponseHandler.h/cpp` | 响应注入 TUN / 隧道回退 |
+| `DnsUdpRelay.h/cpp` | 旧式 UDP 直连 relay（protect + 超时） |
+| `DnsRouteDispatcher.h/cpp` | 将 `DnsRouteAction` 映射到 resolver / relay / tunnel 回调 |
+| `FakeIpPool.h/cpp` | Clash 风格 fake-ip 池（hostname ↔ 假 IP ↔ 真 IP） |
+| `DnsFakeIpResponse.h/cpp` | 合成 A 记录响应 + 后台真解析 |
+| `DnsProviderCatalog.h/cpp` | 12 个内置 provider 表（从 `DnsResolver` 抽出） |
+| `Rule.h/cpp` | dns-rules.txt 三级匹配（未改） |
+
+单元测试（`tests/cpp/`，14 项全部通过）：
+
+| 文件 | 覆盖 |
+|------|------|
+| `dns_redirect_plan_test.cpp` | 网关 / 规则 / unmatched / AAAA / defer |
+| `dns_reachability_test.cpp` | bypass IP、provider、规则可达性 |
+| `dns_response_handler_test.cpp` | TUN 注入、隧道回退、缓存 |
+| `dns_route_dispatcher_test.cpp` | 各 `DnsRouteAction` 分发 |
+| `dns_udp_relay_test.cpp` | TXID 校验、spawn 前置条件 |
+| `fake_ip_pool_test.cpp` | 分配、真 IP 回填、非法 CIDR |
+| `dns_fake_ip_response_test.cpp` | 过滤、合成、解析 round-trip |
+
+## Plan B：统一解析路径
+
+`DnsRedirectPlan::Decide()` 是纯函数，把原先散落在 `RedirectDnsServer()` 里的多套分支收敛为单一决策表：
+
+| 优先级 | 条件 | `DnsRouteAction` |
+|--------|------|------------------|
+| 1 | AAAA 且不允许 IPv6 响应 | `kBlockAAAA` |
+| 2 | 目标为 TUN 网关 DNS 且 `vdns::servers` 非空 | `kUdpRelay`（网关上游） |
+| 3 | `dns-rules` 命中 provider | `kResolveProvider` |
+| 4 | `dns-rules` 命中 legacy IP | `kUdpRelay` |
+| 5 | 未命中且 `intercept-unmatched=true` | `kResolveUnmatched` |
+| 6 | 桌面同目标 defer | `kDeferToTunnel` |
+| 7 | 其余 | `kDrop` |
+
+网关查询与规则未命中都走 `DnsResolver` 多协议链（`foreign → domestic → cloudflare`），不再依赖「空 `vdns::servers` 即失败」的旧路径。隧道回退由 `DnsResponseHandler` 统一处理，遥测键：`dns.redirect.success` / `fallback` / `dropped`。
+
+## Plan C：Fake-IP（Clash 风格）
+
+配置（默认关闭）：
+
+```json
+"dns": {
+  "fake-ip": {
+    "enabled": false,
+    "range": "198.18.0.1/16"
+  }
+}
+```
+
+流程：
+
+1. A 查询 + `fake-ip.enabled` → `FakeIpPool` 分配假 IP，立即回合成 A 记录。
+2. 后台 `SpawnFakeIpBackgroundResolve()` 走与 unmatched 相同的 resolver 链解析真 IP。
+3. 连接层 `RewriteFakeIpAddress()`（UDP/TCP）在真 IP 就绪后改写目标地址。
+4. 桌面端为 fake-ip 网段添加 TUN 路由；Android/iOS 全隧道模式下假 IP 流量自然进 TUN。
+
+排除：`.local`、`.lan`、反向 ARPA、`localhost` 等（`DnsFakeIpResponse::ShouldUseFakeIp`）。
+
+移动端：`dnsConfig.fakeIpEnabled` / `fakeIpRange`（Android）、`LaunchOptions.dnsFakeIpEnabled` / `dnsFakeIpRange`（iOS Options 页）合并进 `effectiveJson`。
+
 ## 实现状态总览
 
 | 功能 | 状态 | 说明 |
@@ -12,6 +100,12 @@
 | 12 个内置提供商 | ✅ 已实现 | 代码硬编码于 `Providers()` 静态表中 |
 | dns-rules.txt 扩展（提供商名称） | ✅ 已实现 | `Rule::Load()` 扩展，`ProviderName` 字段 |
 | `intercept-unmatched` 配置 | ✅ 已实现 | 默认开启；未命中规则时按 `foreign -> domestic -> cloudflare` 解析 |
+| Plan A 模块拆分 | ✅ 已实现 | `DnsInterceptor` + 6 个子模块，switcher 仅委托 |
+| Plan B 统一路由 | ✅ 已实现 | `DnsRedirectPlan` + `DnsRouteDispatcher` |
+| Plan C fake-ip | ✅ 已实现 | `FakeIpPool` + 后台解析 + 连接改写；默认关闭 |
+| `dns.fake-ip.enabled` / `range` | ✅ 已实现 | 默认 `false` / `198.18.0.1/16` |
+| 移动端 fake-ip UI | ✅ 已实现 | Android Options + iOS Options |
+| 移动端 `intercept-unmatched` 合并修复 | ✅ 已实现 | 缺省键保留 profile 默认 `true` |
 | `verify-peer` TLS 证书校验 | ✅ 已实现 | 可选，使用 `cacert.pem` / 内置根证书 / 系统 CA |
 | ECS IPv4 /24 注入 | ✅ 已实现 | `InjectEcsOptRr()` 内联实现 |
 | ClientExitIP 服务器→客户端传递 | ✅ 已实现 | 优先级 2 的出口 IP 来源 |
@@ -65,7 +159,8 @@
 |------|------|------|
 | `vdns` 缓存 | `ppp/net/asio/vdns.h/cpp` | `QueryCache`/`QueryCache2`/`AddCache`/`UpdateAsync` 完全复用 |
 | `dns::Rule` | `ppp/app/client/dns/Rule.h/cpp` | 三级匹配（full→regexp→suffix）完全保留 |
-| `RedirectDnsServer` | `VEthernetNetworkSwitcher.cpp` | 现有 UDP 转发路径完全保留 |
+| `RedirectDnsServer` | `VEthernetNetworkSwitcher.cpp` | 入口签名不变，委托 `dns::DnsInterceptor` |
+| `dns::DnsInterceptor` | `ppp/app/client/dns/DnsInterceptor.h/cpp` | DNS 拦截编排（Plan A 重构） |
 | `dns-rules.txt` | 配置文件 | 旧 IP 格式保留；默认示例改为 `domain /provider/nic|tun` |
 
 ### 扩展的组件
@@ -74,7 +169,7 @@
 |------|---------|------|
 | `dns::Rule::Load` | 扩展 | `server_ip` 字段新增识别提供商简写名称 |
 | `RedirectDnsServer` | 扩展 | 当匹配到提供商名称时走 `DnsResolver` 路径；未命中规则默认走 `foreign -> domestic -> cloudflare` |
-| `appsettings.json` | 扩展 | 新增 `dns.servers.domestic`/`dns.servers.foreign`/`dns.intercept-unmatched` 配置 |
+| `appsettings.json` | 扩展 | 新增 `dns.servers.*`、`dns.intercept-unmatched`、`dns.fake-ip.*` 配置 |
 | `VirtualEthernetInformationExtensions` | 扩展 | 新增 `ClientExitIP` 字段，服务器填充，客户端读取用于 ECS |
 
 ### 新增的组件

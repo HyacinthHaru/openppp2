@@ -52,7 +52,7 @@ flowchart TD
 
 ## 客户端所有权
 
-`VEthernetNetworkSwitcher` 负责客户端侧路由和 DNS 状态。
+`VEthernetNetworkSwitcher` 负责客户端侧路由；DNS 拦截状态由 `dns::DnsInterceptor` 持有，switcher 仅委托。
 
 ### 路由信息表
 
@@ -65,12 +65,12 @@ flowchart TD
 
 ### DNS 状态
 
-| 字段 | 说明 |
-|------|------|
-| `dns_rules_` | DNS 规则（域名 → resolver 映射） |
-| `dns_serverss_` | DNS 服务器路由分配 |
+| 字段 / 对象 | 说明 |
+|-------------|------|
+| `dns_interceptor_` | DNS 编排器（规则表、resolver、fake-ip 池） |
+| `dns_serverss_` | DNS / provider 可达性路由（tunnel vs NIC bypass） |
 
-源文件：`ppp/app/client/VEthernetNetworkSwitcher.h`
+`RedirectDnsServer()` 签名不变，内部调用 `dns_interceptor_->HandleQuery()`。详见 [DNS_MODULE_DESIGN.md](DNS_MODULE_DESIGN.md)。
 
 ---
 
@@ -142,25 +142,24 @@ bool ProtectDefaultRoute() noexcept;
 
 ## DNS 规则
 
-客户端 DNS 规则决定某个域名或域名模式应该使用哪个 resolver。
+客户端 DNS 规则决定某个域名或域名模式应该使用哪个 resolver。拦截后的完整流水线见 [DNS_MODULE_DESIGN.md](DNS_MODULE_DESIGN.md)。
 
 ### 规则匹配流程
 
 ```mermaid
 flowchart TD
-    A[域名 X 的 DNS 查询] --> B[检查 dns_rules_]
-    B --> C{规则命中？}
-    C -->|后缀匹配| D[使用规则中的 resolver]
-    C -->|通配符匹配| D
-    C -->|精确匹配| D
-    C -->|未命中| E[使用默认 resolver]
-    D --> F{Resolver 是否可达？}
-    F -->|是| G[向匹配的 resolver 发送查询]
-    F -->|否| E
+    A[UDP:53 进入 TUN] --> B[vdns 缓存]
+    B -->|miss| C[DnsRedirectPlan::Decide]
+    C --> D{规则 / 网关 / unmatched}
+    D -->|provider| E[DnsResolver DoH/DoT/TCP/UDP]
+    D -->|legacy IP| F[DnsUdpRelay]
+    D -->|unmatched + intercept| E
+    D -->|fake-ip A 查询| G[FakeIpPool 立即回假 IP]
+    G --> H[后台真解析]
+    E --> I[DnsResponseHandler 注入 TUN]
+    F --> I
+    I -->|失败| J[隧道回退 SendTo]
 ```
-
-resolver 决策与路由可达性绑定：
-规则只有在到 resolver 的路径真实可达时才有意义。
 
 ### DNS 规则配置格式
 
@@ -369,6 +368,8 @@ vBGP 路由会合并到客户端 RIB 中。
 | `dns.servers.domestic` | `doh.pub` | 默认国内 provider 或结构化 DNS server 配置 |
 | `dns.servers.foreign` | `cloudflare` | 默认海外 provider 或结构化 DNS server 配置 |
 | `dns.intercept-unmatched` | `true` | 拦截未命中规则的 DNS 查询，并按 `foreign -> domestic -> cloudflare` 解析 |
+| `dns.fake-ip.enabled` | `false` | 开启 Clash 风格 fake-ip（立即回假 A 记录，后台解析真 IP） |
+| `dns.fake-ip.range` | `198.18.0.1/16` | fake-ip 地址池 CIDR |
 
 ---
 

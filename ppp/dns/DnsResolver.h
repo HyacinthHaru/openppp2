@@ -49,6 +49,14 @@ namespace ppp {
             int                                             port = 19302;
         };
 
+        /**
+         * @brief STUN candidate specified as hostname:port; resolved at probe time.
+         */
+        struct StunHostnameCandidate {
+            ppp::string                                     hostname;
+            int                                             port = 3478;
+        };
+
         class DnsResolver final : public std::enable_shared_from_this<DnsResolver> {
         public:
             typedef ppp::function<bool(int native_handle)>  ProtectSocketCallback;
@@ -112,6 +120,9 @@ namespace ppp {
              * @param candidates  Vector of "ip:port" or "hostname:port" strings.
              */
             void                                            SetStunCandidates(ppp::vector<StunCandidate> candidates) noexcept;
+
+            void                                            SetStunHostnameCandidates(
+                ppp::vector<StunHostnameCandidate>          candidates) noexcept;
 
             /**
              * @brief Resolves a DNS query through a named provider, with up to two
@@ -354,6 +365,7 @@ namespace ppp {
             ppp::string                                     ecs_override_ip_;
             bool                                            tls_verify_peer_ = true;
             ppp::vector<StunCandidate>                      stun_candidates_;
+            ppp::vector<StunHostnameCandidate>              stun_hostname_candidates_;
             std::atomic<std::size_t>                        stun_rotation_{ 0 };
             std::atomic<bool>                               allow_ipv6_response_{ false }; ///< When false, AAAA queries are answered with empty NOERROR. Default false; promoted to true by OnInformation when the server assigns IPv6.
 

@@ -21,6 +21,7 @@ final class OptionsViewController: UIViewController {
     private let dnsRules = FormTextView(label: "DNS Rules")
     private let dnsDomestic = FormTextField(label: "Domestic DNS")
     private let dnsForeign = FormTextField(label: "Foreign DNS")
+    private let dnsFakeIpRange = FormTextField(label: "Fake-IP Range")
     private let stunCandidates = FormTextView(label: "STUN Candidates")
     private let geoCountry = FormTextField(label: "Geo Country")
     private let geoIpDat = FormTextField(label: "GeoIP.dat")
@@ -37,6 +38,7 @@ final class OptionsViewController: UIViewController {
     private let autoReconnectOnPathRecovery = UISwitch()
     private let routeModeControl = UISegmentedControl(items: LaunchRouteMode.allCases.map(\.localizedDisplayName))
     private let ecsEnabled = UISwitch()
+    private let fakeIpEnabled = UISwitch()
     private let tlsVerifyPeer = UISwitch()
 
     override func viewDidLoad() {
@@ -86,6 +88,8 @@ final class OptionsViewController: UIViewController {
             row([dns1, dns2], weights: [1, 1]),
             dnsRules,
             row([dnsDomestic, dnsForeign], weights: [1, 1]),
+            switchRow(title: "Fake-IP", subtitle: "Clash-style instant fake A records", control: fakeIpEnabled),
+            dnsFakeIpRange,
             switchRow(title: "ECS", subtitle: "EDNS Client Subnet", control: ecsEnabled),
             switchRow(title: L10n.tr("options.tlsVerify"), subtitle: L10n.tr("options.tlsVerify.detail"), control: tlsVerifyPeer),
             stunCandidates
@@ -131,6 +135,7 @@ final class OptionsViewController: UIViewController {
         dnsRules.text = options.dnsRulesList
         dnsDomestic.text = options.dnsDomestic
         dnsForeign.text = options.dnsForeign
+        dnsFakeIpRange.text = options.dnsFakeIpRange
         stunCandidates.text = options.dnsStunCandidates
         geoCountry.text = options.geoCountry
         geoIpDat.text = options.geoIpDat
@@ -146,6 +151,7 @@ final class OptionsViewController: UIViewController {
         autoReconnectOnPathRecovery.isOn = options.autoReconnectOnPathRecovery
         routeModeControl.selectedSegmentIndex = LaunchRouteMode.allCases.firstIndex(of: options.routeMode) ?? 0
         ecsEnabled.isOn = options.dnsEcsEnabled
+        fakeIpEnabled.isOn = options.dnsFakeIpEnabled
         tlsVerifyPeer.isOn = options.dnsTlsVerifyPeer
     }
 
@@ -163,6 +169,7 @@ final class OptionsViewController: UIViewController {
         options.dnsRulesList = dnsRules.textValue
         options.dnsDomestic = dnsDomestic.textValue
         options.dnsForeign = dnsForeign.textValue
+        options.dnsFakeIpRange = dnsFakeIpRange.textValue
         options.dnsStunCandidates = stunCandidates.textValue
         options.geoCountry = geoCountry.textValue
         options.geoIpDat = geoIpDat.textValue
@@ -179,6 +186,7 @@ final class OptionsViewController: UIViewController {
         let routeModes = LaunchRouteMode.allCases
         options.setRouteMode(routeModes[max(0, min(routeModeControl.selectedSegmentIndex, routeModes.count - 1))])
         options.dnsEcsEnabled = ecsEnabled.isOn
+        options.dnsFakeIpEnabled = fakeIpEnabled.isOn
         options.dnsTlsVerifyPeer = tlsVerifyPeer.isOn
         store.setLaunchOptions(options)
 

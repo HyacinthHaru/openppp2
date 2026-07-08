@@ -7,6 +7,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
@@ -14,6 +18,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.PowerManager
+import android.os.SystemClock
 import android.system.OsConstants
 import android.util.Log
 import org.json.JSONObject
@@ -55,6 +61,14 @@ class PppVpnService : VpnService() {
     private var linkStateHandler: Handler? = null
     private var connectStartedAtMs: Long = 0L
     private var lastReportedLinkState: Int = 6
+    private var activeConfigJson: String? = null
+    private var activeVpnOptionsJson: String? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var networkWasAvailable: Boolean = true
+    private var lastNetworkReconnectAtMs: Long = 0L
+    private val networkReconnectDebounceMs = 5000L
     private val linkStatePoller = object : Runnable {
         override fun run() {
             if (!isRunning) return
@@ -209,6 +223,10 @@ class PppVpnService : VpnService() {
         currentState = 0
         PppStateStore.set(this, 0)
         stopLinkStatePoller()
+        stopNetworkMonitor()
+        releaseWakeLock()
+        activeConfigJson = null
+        activeVpnOptionsJson = null
         vpnInterface?.close()
         vpnInterface = null
         instance = null
@@ -238,6 +256,10 @@ class PppVpnService : VpnService() {
 
         startForeground(NOTIFICATION_ID, buildNotification("正在连接..."))
         PppLog.write(this, "startForeground done")
+        activeConfigJson = configJson
+        activeVpnOptionsJson = vpnOptionsJson
+        acquireWakeLock()
+        startNetworkMonitor()
         connectStartedAtMs = android.os.SystemClock.elapsedRealtime()
         PppLog.write(this, "perf connect_requested")
         notifyStateChanged(1) // connecting
@@ -506,6 +528,8 @@ class PppVpnService : VpnService() {
                 } finally {
                     isRunning = false
                     stopLinkStatePoller()
+                    stopNetworkMonitor()
+                    releaseWakeLock()
                     vpnInterface?.close()
                     vpnInterface = null
                     val pConfig = pendingConfig
@@ -522,6 +546,8 @@ class PppVpnService : VpnService() {
                             startVpn(pConfig, pOptions ?: "{}")
                         }
                     } else {
+                        activeConfigJson = null
+                        activeVpnOptionsJson = null
                         notifyStateChanged(0) // disconnected
                         stopForeground(true)
                         stopSelf()
@@ -636,7 +662,7 @@ class PppVpnService : VpnService() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "OpenPPP2 VPN",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "VPN service notification"
             }
@@ -671,5 +697,108 @@ class PppVpnService : VpnService() {
     private fun updateNotification(text: String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(NOTIFICATION_ID, buildNotification(text))
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "openppp2:vpn").apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        PppLog.write(this, "wake lock acquired")
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { lock ->
+            if (lock.isHeld) {
+                lock.release()
+                PppLog.write(this, "wake lock released")
+            }
+        }
+        wakeLock = null
+    }
+
+    private fun startNetworkMonitor() {
+        if (networkCallback != null) return
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        connectivityManager = cm
+        networkWasAvailable = isNetworkValidated(cm)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: Network) {
+                networkWasAvailable = false
+                PppLog.write(this@PppVpnService, "network lost")
+            }
+
+            override fun onAvailable(network: Network) {
+                maybeReconnectAfterNetworkChange("available")
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) {
+                if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                ) {
+                    maybeReconnectAfterNetworkChange("validated")
+                }
+            }
+        }
+        networkCallback = callback
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                cm.registerDefaultNetworkCallback(callback)
+            } else {
+                val request = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                cm.registerNetworkCallback(request, callback)
+            }
+            PppLog.write(this, "network monitor started")
+        } catch (e: Throwable) {
+            PppLog.write(this, "network monitor start failed", e)
+            networkCallback = null
+            connectivityManager = null
+        }
+    }
+
+    private fun stopNetworkMonitor() {
+        val callback = networkCallback
+        networkCallback = null
+        if (callback != null) {
+            try {
+                connectivityManager?.unregisterNetworkCallback(callback)
+                PppLog.write(this, "network monitor stopped")
+            } catch (e: Throwable) {
+                PppLog.write(this, "network monitor stop failed", e)
+            }
+        }
+        connectivityManager = null
+        networkWasAvailable = true
+    }
+
+    private fun isNetworkValidated(cm: ConnectivityManager): Boolean {
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
+    private fun maybeReconnectAfterNetworkChange(reason: String) {
+        if (!isRunning) return
+        val wasAvailable = networkWasAvailable
+        networkWasAvailable = true
+        if (wasAvailable) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNetworkReconnectAtMs < networkReconnectDebounceMs) return
+        lastNetworkReconnectAtMs = now
+
+        val config = activeConfigJson ?: return
+        PppLog.write(this, "network recovered ($reason) -> reconnecting VPN")
+        pendingConfig = config
+        pendingVpnOptions = activeVpnOptionsJson ?: "{}"
+        stopVpn()
     }
 }

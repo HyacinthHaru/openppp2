@@ -179,6 +179,8 @@ cdnst.net          /cloudflare/tun''';
       'domestic': 'doh.pub',
       'foreign': 'cloudflare',
       'interceptUnmatched': true,
+      'fakeIpEnabled': false,
+      'fakeIpRange': '198.18.0.1/16',
       'ecsEnabled': true,
       'ecsOverrideIp': '',
       'tlsVerifyPeer': true,
@@ -259,11 +261,25 @@ cdnst.net          /cloudflare/tun''';
       if (foreign.isNotEmpty) servers['foreign'] = foreign;
       dns['servers'] = servers;
 
-      dns['intercept-unmatched'] = dc['interceptUnmatched'] == true;
-      ecs['enabled'] = dc['ecsEnabled'] == true;
+      // Preserve profile/template defaults when older saved options omit these
+      // keys; `== true` used to force them off and break unmatched-domain DNS.
+      dns['intercept-unmatched'] =
+          dc['interceptUnmatched'] ?? dns['intercept-unmatched'] ?? true;
+
+      final fakeIp = (dns['fake-ip'] is Map)
+          ? Map<String, dynamic>.from(dns['fake-ip'] as Map)
+          : <String, dynamic>{};
+      fakeIp['enabled'] = dc['fakeIpEnabled'] ?? fakeIp['enabled'] ?? false;
+      final fakeRange = (dc['fakeIpRange'] ?? '').toString().trim();
+      if (fakeRange.isNotEmpty) {
+        fakeIp['range'] = fakeRange;
+      }
+      dns['fake-ip'] = fakeIp;
+
+      ecs['enabled'] = dc['ecsEnabled'] ?? ecs['enabled'] ?? true;
       ecs['override-ip'] = (dc['ecsOverrideIp'] ?? '').toString();
       dns['ecs'] = ecs;
-      tls['verify-peer'] = dc['tlsVerifyPeer'] == true;
+      tls['verify-peer'] = dc['tlsVerifyPeer'] ?? tls['verify-peer'] ?? true;
       dns['tls'] = tls;
 
       final stunRaw = (dc['stunCandidates'] ?? '').toString();

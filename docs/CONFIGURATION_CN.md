@@ -103,6 +103,8 @@ udp.dns.cache     = true;    ///< DNS cache 写入开关（仍要求 ttl > 0）
 dns.servers.domestic = "doh.pub";      ///< 默认国内 DNS provider
 dns.servers.foreign  = "cloudflare";   ///< 默认海外 DNS provider
 dns.intercept_unmatched = true;        ///< 未命中规则默认走 foreign -> domestic -> cloudflare
+dns.fake_ip.enabled = false;           ///< Clash 风格 fake-ip，默认关闭
+dns.fake_ip.range = "198.18.0.1/16";   ///< fake-ip 池 CIDR
 udp.inactive.timeout = 72;   ///< UDP 空闲超时（秒）
 
 // TCP 相关默认值
@@ -368,6 +370,10 @@ key.kf / key.kh / key.kl / key.kx / key.sb —— 非法值时重置为框架内
             "foreign": "cloudflare"
         },
         "intercept-unmatched": true,
+        "fake-ip": {
+            "enabled": false,
+            "range": "198.18.0.1/16"
+        },
         "ecs": {
             "enabled": false,
             "override-ip": ""

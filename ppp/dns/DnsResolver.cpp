@@ -1,5 +1,6 @@
 #include <ppp/stdafx.h>
 #include <ppp/dns/DnsResolver.h>
+#include <ppp/dns/DnsProviderCatalog.h>
 #include <ppp/dns/DnsWireValidation.h>
 #include <ppp/net/Socket.h>
 #include <ppp/net/Ipep.h>
@@ -314,7 +315,7 @@ namespace ppp {
          * @brief Appends built-in provider entries when text is a provider short-name.
          */
         static bool AppendProviderEntries(ppp::vector<ServerEntry>& entries, const ppp::string& provider_name) noexcept {
-            const ppp::vector<ServerEntry>* provider = DnsResolver::GetProvider(provider_name);
+            const ppp::vector<ServerEntry>* provider = DnsProviderCatalog::GetProvider(provider_name);
             if (NULLPTR == provider) {
                 return false;
             }
@@ -350,6 +351,27 @@ namespace ppp {
             return expanded;
         }
 
+        static bool ResolveEntryBootstrapAddress(
+            const ServerEntry& entry,
+            boost::asio::ip::address& ip) noexcept {
+
+            boost::system::error_code ec;
+            ip = ParseAddressOnly(entry.address, ec);
+            if (!ec && !ip.is_unspecified()) {
+                return true;
+            }
+
+            for (const boost::asio::ip::address& bootstrap : entry.bootstrap_ips) {
+                if (!bootstrap.is_unspecified() && !bootstrap.is_loopback() && !bootstrap.is_multicast()) {
+                    ip = bootstrap;
+                    return true;
+                }
+            }
+
+            ip = boost::asio::ip::address();
+            return false;
+        }
+
         static int ParsePort(const ppp::string& address_text, int default_port) noexcept {
             ppp::string text = ATrim(address_text);
             std::size_t colon = text.find(':');
@@ -364,89 +386,6 @@ namespace ppp {
 
             int port = atoi(port_text.data());
             return port > 0 && port <= UINT16_MAX ? port : default_port;
-        }
-
-        static ServerEntry MakeEntry(Protocol protocol, const char* address, const char* hostname = NULLPTR, const char* url = NULLPTR) noexcept {
-            ServerEntry entry;
-            entry.protocol = protocol;
-            if (NULLPTR != address) {
-                entry.address = address;
-            }
-            if (NULLPTR != hostname) {
-                entry.hostname = hostname;
-            }
-            if (NULLPTR != url) {
-                entry.url = url;
-            }
-            return entry;
-        }
-
-        /* ========================================================================
-         * Provider table — all 12 documented providers.
-         * ======================================================================== */
-
-        static const ppp::unordered_map<ppp::string, ppp::vector<ServerEntry> >& Providers() noexcept {
-            static const ppp::unordered_map<ppp::string, ppp::vector<ServerEntry> > providers = {
-                { "doh.pub", {
-                    MakeEntry(Protocol::DoH, "119.29.29.29:443", "doh.pub", "https://doh.pub/dns-query"),
-                    MakeEntry(Protocol::DoT, "119.29.29.29:853", "dot.pub"),
-                    MakeEntry(Protocol::TCP, "119.29.29.29:53"),
-                    MakeEntry(Protocol::UDP, "119.29.29.29:53") } },
-                { "alidns", {
-                    MakeEntry(Protocol::DoH, "223.5.5.5:443", "dns.alidns.com", "https://dns.alidns.com/dns-query"),
-                    MakeEntry(Protocol::DoT, "223.5.5.5:853", "dns.alidns.com"),
-                    MakeEntry(Protocol::TCP, "223.5.5.5:53"),
-                    MakeEntry(Protocol::UDP, "223.5.5.5:53") } },
-                { "baidu", {
-                    MakeEntry(Protocol::DoH, "180.76.76.76:443", "doh.baidu.com", "https://doh.baidu.com/dns-query"),
-                    MakeEntry(Protocol::TCP, "180.76.76.76:53"),
-                    MakeEntry(Protocol::UDP, "180.76.76.76:53") } },
-                { "360", {
-                    MakeEntry(Protocol::DoH, "101.226.4.6:443", "doh.360.cn", "https://doh.360.cn/dns-query"),
-                    MakeEntry(Protocol::DoT, "101.226.4.6:853", "dns.360.cn"),
-                    MakeEntry(Protocol::TCP, "101.226.4.6:53"),
-                    MakeEntry(Protocol::UDP, "101.226.4.6:53") } },
-                { "114", {
-                    MakeEntry(Protocol::DoH, "114.114.114.114:443", "dns.114.com", "https://dns.114.com/dns-query"),
-                    MakeEntry(Protocol::TCP, "114.114.114.114:53"),
-                    MakeEntry(Protocol::UDP, "114.114.114.114:53") } },
-                { "tuna", {
-                    MakeEntry(Protocol::DoH, "101.6.6.6:443", "doh.tuna.tsinghua.edu.cn", "https://doh.tuna.tsinghua.edu.cn/dns-query"),
-                    MakeEntry(Protocol::DoT, "101.6.6.6:853", "dns.tuna.tsinghua.edu.cn"),
-                    MakeEntry(Protocol::TCP, "101.6.6.6:53"),
-                    MakeEntry(Protocol::UDP, "101.6.6.6:53") } },
-                { "cloudflare", {
-                    MakeEntry(Protocol::DoH, "1.1.1.1:443", "cloudflare-dns.com", "https://cloudflare-dns.com/dns-query"),
-                    MakeEntry(Protocol::DoT, "1.1.1.1:853", "cloudflare-dns.com"),
-                    MakeEntry(Protocol::TCP, "1.1.1.1:53"),
-                    MakeEntry(Protocol::UDP, "1.1.1.1:53") } },
-                { "google", {
-                    MakeEntry(Protocol::DoH, "8.8.8.8:443", "dns.google", "https://dns.google/dns-query"),
-                    MakeEntry(Protocol::DoT, "8.8.8.8:853", "dns.google"),
-                    MakeEntry(Protocol::TCP, "8.8.8.8:53"),
-                    MakeEntry(Protocol::UDP, "8.8.8.8:53") } },
-                { "quad9", {
-                    MakeEntry(Protocol::DoH, "9.9.9.9:443", "dns.quad9.net", "https://dns.quad9.net/dns-query"),
-                    MakeEntry(Protocol::DoT, "9.9.9.9:853", "dns.quad9.net"),
-                    MakeEntry(Protocol::TCP, "9.9.9.9:53"),
-                    MakeEntry(Protocol::UDP, "9.9.9.9:53") } },
-                { "adguard", {
-                    MakeEntry(Protocol::DoH, "94.140.14.14:443", "dns.adguard.com", "https://dns.adguard.com/dns-query"),
-                    MakeEntry(Protocol::DoT, "94.140.14.14:853", "dns.adguard.com"),
-                    MakeEntry(Protocol::TCP, "94.140.14.14:53"),
-                    MakeEntry(Protocol::UDP, "94.140.14.14:53") } },
-                { "nextdns", {
-                    MakeEntry(Protocol::DoH, "45.90.28.0:443", "dns.nextdns.io", "https://dns.nextdns.io/dns-query"),
-                    MakeEntry(Protocol::DoT, "45.90.28.0:853", "dns.nextdns.io"),
-                    MakeEntry(Protocol::TCP, "45.90.28.0:53"),
-                    MakeEntry(Protocol::UDP, "45.90.28.0:53") } },
-                { "mullvad", {
-                    MakeEntry(Protocol::DoH, "194.242.2.2:443", "dns.mullvad.net", "https://dns.mullvad.net/dns-query"),
-                    MakeEntry(Protocol::DoT, "194.242.2.2:853", "dns.mullvad.net"),
-                    MakeEntry(Protocol::TCP, "194.242.2.2:53"),
-                    MakeEntry(Protocol::UDP, "194.242.2.2:53") } },
-            };
-            return providers;
         }
 
         /* ========================================================================
@@ -865,6 +804,12 @@ namespace ppp {
             ClearStunEcsCache();
         }
 
+        void DnsResolver::SetStunHostnameCandidates(ppp::vector<StunHostnameCandidate> candidates) noexcept {
+            stun_hostname_candidates_ = std::move(candidates);
+            stun_rotation_.store(0, std::memory_order_relaxed);
+            ClearStunEcsCache();
+        }
+
         std::shared_ptr<boost::asio::ssl::context> DnsResolver::AcquireClientSslContext(bool verify_peer) noexcept {
             std::lock_guard<std::mutex> lk(tls_context_mutex_);
             if (NULLPTR != tls_client_ssl_ctx_ && tls_client_ssl_ctx_verify_peer_ == verify_peer) {
@@ -1090,14 +1035,11 @@ namespace ppp {
          * ======================================================================== */
 
         bool DnsResolver::HasProvider(const ppp::string& name) noexcept {
-            return NULLPTR != GetProvider(name);
+            return DnsProviderCatalog::HasProvider(name);
         }
 
         const ppp::vector<ServerEntry>* DnsResolver::GetProvider(const ppp::string& name) noexcept {
-            ppp::string key = NormalizeProviderName(name);
-            const auto& providers = Providers();
-            auto tail = providers.find(key);
-            return tail == providers.end() ? NULLPTR : &tail->second;
+            return DnsProviderCatalog::GetProvider(name);
         }
 
         /* ========================================================================
@@ -1461,9 +1403,8 @@ namespace ppp {
                 }
             }
 
-            boost::system::error_code ec;
-            boost::asio::ip::address ip = ParseAddressOnly(entry.address, ec);
-            if (ec || ip.is_unspecified()) {
+            boost::asio::ip::address ip;
+            if (!ResolveEntryBootstrapAddress(entry, ip)) {
                 CountDnsTransport(Protocol::DoH, DnsTransportStage::Bootstrap, DnsTransportReason::Invalid);
                 boost::asio::post(context_, [callback]() noexcept { callback(ppp::vector<Byte>()); });
                 return;
@@ -1728,9 +1669,8 @@ namespace ppp {
 
         void DnsResolver::SendDot(const ServerEntry& entry, std::shared_ptr<ppp::vector<Byte> > packet, const ResolveCallback& callback) noexcept {
             CountDnsTransport(Protocol::DoT, DnsTransportStage::Attempt);
-            boost::system::error_code ec;
-            boost::asio::ip::address ip = ParseAddressOnly(entry.address, ec);
-            if (ec || ip.is_unspecified()) {
+            boost::asio::ip::address ip;
+            if (!ResolveEntryBootstrapAddress(entry, ip)) {
                 CountDnsTransport(Protocol::DoT, DnsTransportStage::Bootstrap, DnsTransportReason::Invalid);
                 boost::asio::post(context_, [callback]() noexcept { callback(ppp::vector<Byte>()); });
                 return;
@@ -1987,9 +1927,8 @@ namespace ppp {
 
         void DnsResolver::SendUdp(const ServerEntry& entry, std::shared_ptr<ppp::vector<Byte> > packet, const ResolveCallback& callback) noexcept {
             CountDnsTransport(Protocol::UDP, DnsTransportStage::Attempt);
-            boost::system::error_code ec;
-            boost::asio::ip::address ip = ParseAddressOnly(entry.address, ec);
-            if (ec || ip.is_unspecified()) {
+            boost::asio::ip::address ip;
+            if (!ResolveEntryBootstrapAddress(entry, ip)) {
                 CountDnsTransport(Protocol::UDP, DnsTransportStage::Bootstrap, DnsTransportReason::Invalid);
                 boost::asio::post(context_, [callback]() noexcept { callback(ppp::vector<Byte>()); });
                 return;
@@ -2063,9 +2002,8 @@ namespace ppp {
 
         void DnsResolver::SendTcp(const ServerEntry& entry, std::shared_ptr<ppp::vector<Byte> > packet, const ResolveCallback& callback) noexcept {
             CountDnsTransport(Protocol::TCP, DnsTransportStage::Attempt);
-            boost::system::error_code ec;
-            boost::asio::ip::address ip = ParseAddressOnly(entry.address, ec);
-            if (ec || ip.is_unspecified()) {
+            boost::asio::ip::address ip;
+            if (!ResolveEntryBootstrapAddress(entry, ip)) {
                 CountDnsTransport(Protocol::TCP, DnsTransportStage::Bootstrap, DnsTransportReason::Invalid);
                 boost::asio::post(context_, [callback]() noexcept { callback(ppp::vector<Byte>()); });
                 return;
@@ -2553,7 +2491,7 @@ namespace ppp {
             const ppp::vector<StunCandidate>& candidates =
                 stun_candidates_.empty() ? DefaultStunCandidates() : stun_candidates_;
 
-            if (candidates.empty()) {
+            if (candidates.empty() && stun_hostname_candidates_.empty()) {
                 ppp::telemetry::Log(Level::kDebug, "dns", "STUN no candidates available");
                 ppp::telemetry::Count("dns.stun.no_candidates", 1);
                 boost::asio::post(context_, [callback]() noexcept {
@@ -2562,28 +2500,10 @@ namespace ppp {
                 return;
             }
 
-            ppp::telemetry::Log(Level::kDebug, "dns", "STUN detection start candidates=%zu", candidates.size());
+            ppp::telemetry::Log(Level::kDebug, "dns", "STUN detection start ip_candidates=%zu hostname_candidates=%zu",
+                candidates.size(), stun_hostname_candidates_.size());
             ppp::telemetry::Count("dns.stun.start", 1);
 
-            // Rotate starting index via atomic fetch_add.
-            std::size_t start = stun_rotation_.fetch_add(1, std::memory_order_relaxed) % candidates.size();
-
-            // Build the ordered candidate list starting from the rotated index.
-            auto ordered = make_shared_object<ppp::vector<StunCandidate> >();
-            if (NULLPTR == ordered) {
-                boost::asio::post(context_, [callback]() noexcept {
-                    callback(boost::asio::ip::address());
-                });
-                return;
-            }
-            ordered->reserve(candidates.size());
-            for (std::size_t i = 0; i < candidates.size(); ++i) {
-                ordered->push_back(candidates[(start + i) % candidates.size()]);
-            }
-
-            // Build a fallback chain from last candidate to first.
-            // Each layer tries one STUN candidate; on failure it invokes the next.
-            // The terminal layer invokes the caller's callback with unspecified.
             auto resolver_weak = weak_from_this();
             auto chain = make_shared_object<ExitIpCallback>(
                 [callback](const boost::asio::ip::address& addr) noexcept {
@@ -2596,38 +2516,98 @@ namespace ppp {
                 return;
             }
 
-            for (int i = static_cast<int>(ordered->size()) - 1; i >= 0; --i) {
-                StunCandidate cand = (*ordered)[static_cast<std::size_t>(i)];
-                std::shared_ptr<ExitIpCallback> next = std::move(chain);
-                chain = make_shared_object<ExitIpCallback>();
-                if (NULLPTR == chain) {
+            if (!candidates.empty()) {
+                std::size_t start = stun_rotation_.fetch_add(1, std::memory_order_relaxed) % candidates.size();
+                auto ordered = make_shared_object<ppp::vector<StunCandidate> >();
+                if (NULLPTR == ordered) {
                     boost::asio::post(context_, [callback]() noexcept {
                         callback(boost::asio::ip::address());
                     });
                     return;
                 }
+                ordered->reserve(candidates.size());
+                for (std::size_t i = 0; i < candidates.size(); ++i) {
+                    ordered->push_back(candidates[(start + i) % candidates.size()]);
+                }
 
-                *chain = [resolver_weak, cand, next](const boost::asio::ip::address& prev_result) noexcept {
-                    if (!prev_result.is_unspecified()) {
-                        ppp::telemetry::Log(Level::kDebug, "dns", "STUN success ip=%s port=%d",
+                for (int i = static_cast<int>(ordered->size()) - 1; i >= 0; --i) {
+                    StunCandidate cand = (*ordered)[static_cast<std::size_t>(i)];
+                    std::shared_ptr<ExitIpCallback> next = std::move(chain);
+                    chain = make_shared_object<ExitIpCallback>();
+                    if (NULLPTR == chain) {
+                        boost::asio::post(context_, [callback]() noexcept {
+                            callback(boost::asio::ip::address());
+                        });
+                        return;
+                    }
+
+                    *chain = [resolver_weak, cand, next](const boost::asio::ip::address& prev_result) noexcept {
+                        if (!prev_result.is_unspecified()) {
+                            ppp::telemetry::Log(Level::kDebug, "dns", "STUN success ip=%s port=%d",
+                                cand.ip.to_string().c_str(), cand.port);
+                            ppp::telemetry::Count("dns.stun.success", 1);
+                            (*next)(prev_result);
+                            return;
+                        }
+                        std::shared_ptr<DnsResolver> resolver = resolver_weak.lock();
+                        if (NULLPTR == resolver) {
+                            (*next)(boost::asio::ip::address());
+                            return;
+                        }
+                        ppp::telemetry::Log(Level::kTrace, "dns", "STUN trying candidate ip=%s:%d",
                             cand.ip.to_string().c_str(), cand.port);
-                        ppp::telemetry::Count("dns.stun.success", 1);
-                        (*next)(prev_result);
-                        return;
-                    }
-                    // Try this candidate.
-                    std::shared_ptr<DnsResolver> resolver = resolver_weak.lock();
-                    if (NULLPTR == resolver) {
-                        (*next)(boost::asio::ip::address());
-                        return;
-                    }
-                    ppp::telemetry::Log(Level::kTrace, "dns", "STUN trying candidate ip=%s:%d",
-                        cand.ip.to_string().c_str(), cand.port);
-                    resolver->TryStunCandidate(cand, *next);
-                };
+                        resolver->TryStunCandidate(cand, *next);
+                    };
+                }
             }
 
-            // Start the chain.
+            if (!stun_hostname_candidates_.empty()) {
+                std::size_t host_start =
+                    stun_rotation_.fetch_add(1, std::memory_order_relaxed) % stun_hostname_candidates_.size();
+                for (std::size_t j = 0; j < stun_hostname_candidates_.size(); ++j) {
+                    StunHostnameCandidate hc =
+                        stun_hostname_candidates_[(host_start + j) % stun_hostname_candidates_.size()];
+                    std::shared_ptr<ExitIpCallback> next = std::move(chain);
+                    chain = make_shared_object<ExitIpCallback>();
+                    if (NULLPTR == chain) {
+                        boost::asio::post(context_, [callback]() noexcept {
+                            callback(boost::asio::ip::address());
+                        });
+                        return;
+                    }
+
+                    *chain = [resolver_weak, hc, next](const boost::asio::ip::address& prev_result) noexcept {
+                        if (!prev_result.is_unspecified()) {
+                            (*next)(prev_result);
+                            return;
+                        }
+                        std::shared_ptr<DnsResolver> resolver = resolver_weak.lock();
+                        if (NULLPTR == resolver) {
+                            (*next)(boost::asio::ip::address());
+                            return;
+                        }
+                        ppp::telemetry::Log(Level::kTrace, "dns", "STUN resolving hostname candidate host=%s port=%d",
+                            hc.hostname.c_str(), hc.port);
+                        ResolveHostnameAsync(resolver->context_, hc.hostname,
+                            [resolver_weak, hc, next](const boost::asio::ip::address& resolved_ip) noexcept {
+                                if (resolved_ip.is_unspecified()) {
+                                    (*next)(resolved_ip);
+                                    return;
+                                }
+                                std::shared_ptr<DnsResolver> resolver_inner = resolver_weak.lock();
+                                if (NULLPTR == resolver_inner) {
+                                    (*next)(boost::asio::ip::address());
+                                    return;
+                                }
+                                StunCandidate cand;
+                                cand.ip = resolved_ip;
+                                cand.port = hc.port;
+                                resolver_inner->TryStunCandidate(cand, *next);
+                            });
+                    };
+                }
+            }
+
             (*chain)(boost::asio::ip::address());
         }
 

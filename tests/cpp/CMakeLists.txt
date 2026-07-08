@@ -11,6 +11,7 @@ set(OPENPPP2_TEST_INCLUDES
     "${OPENPPP2_ROOT}"
     "${OPENPPP2_ROOT}/common"
     "${OPENPPP2_ROOT}/common/dnslib"
+    "${OPENPPP2_ROOT}/common/json/include"
 )
 
 foreach(_hint /usr/include /usr/local/include /opt/homebrew/include)
@@ -37,7 +38,7 @@ function(openppp2_add_cpp_test target)
         target_compile_options(${target} PRIVATE -fprofile-instr-generate -fcoverage-mapping)
         target_link_options(${target} PRIVATE -fprofile-instr-generate)
     endif()
-    if(target STREQUAL "p2p_replay_window_test" OR target STREQUAL "base64_test" OR target STREQUAL "dns_server_validation_test" OR target STREQUAL "dns_wire_validation_test" OR target STREQUAL "sysctl_validation_test")
+    if(target STREQUAL "p2p_replay_window_test" OR target STREQUAL "base64_test" OR target STREQUAL "dns_server_validation_test" OR target STREQUAL "dns_wire_validation_test" OR target STREQUAL "sysctl_validation_test" OR target STREQUAL "dns_redirect_plan_test" OR target STREQUAL "dns_reachability_test" OR target STREQUAL "dns_response_handler_test" OR target STREQUAL "dns_route_dispatcher_test" OR target STREQUAL "dns_udp_relay_test" OR target STREQUAL "fake_ip_pool_test" OR target STREQUAL "dns_fake_ip_response_test")
         target_link_libraries(${target} PRIVATE OpenSSL::SSL OpenSSL::Crypto)
     endif()
     add_test(NAME ${target} COMMAND ${target})
@@ -50,3 +51,29 @@ openppp2_add_cpp_test(dns_server_validation_test SOURCES dns_server_validation_t
 openppp2_add_cpp_test(dns_wire_validation_test SOURCES dns_wire_validation_test.cpp)
 openppp2_add_cpp_test(base64_test SOURCES base64_test.cpp "${OPENPPP2_ROOT}/common/base64/base64.cpp")
 openppp2_add_cpp_test(sysctl_validation_test SOURCES sysctl_validation_test.cpp)
+openppp2_add_cpp_test(dns_redirect_plan_test SOURCES
+    dns_redirect_plan_test.cpp
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsRedirectPlan.cpp")
+openppp2_add_cpp_test(dns_reachability_test SOURCES
+    dns_reachability_test.cpp
+    support/ppp_test_stubs.cpp
+    "${OPENPPP2_ROOT}/ppp/hash/hash_bytes.cpp"
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsReachabilityParse.cpp"
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsReachability.cpp"
+    "${OPENPPP2_ROOT}/ppp/dns/DnsProviderCatalog.cpp")
+openppp2_add_cpp_test(dns_response_handler_test SOURCES
+    dns_response_handler_test.cpp
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsResponseHandler.cpp"
+    "${OPENPPP2_ROOT}/ppp/diagnostics/Telemetry.cpp")
+openppp2_add_cpp_test(dns_route_dispatcher_test SOURCES
+    dns_route_dispatcher_test.cpp
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsRouteDispatcher.cpp")
+openppp2_add_cpp_test(dns_udp_relay_test SOURCES dns_udp_relay_test.cpp)
+openppp2_add_cpp_test(fake_ip_pool_test SOURCES
+    fake_ip_pool_test.cpp
+    support/ppp_test_stubs.cpp
+    "${OPENPPP2_ROOT}/ppp/hash/hash_bytes.cpp"
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/FakeIpPool.cpp")
+openppp2_add_cpp_test(dns_fake_ip_response_test SOURCES
+    dns_fake_ip_response_test.cpp
+    "${OPENPPP2_ROOT}/ppp/app/client/dns/DnsFakeIpResponse.cpp")

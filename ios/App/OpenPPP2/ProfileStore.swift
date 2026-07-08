@@ -277,6 +277,10 @@ final class ProfileStore {
         if !options.dnsForeign.isEmpty { servers["foreign"] = options.dnsForeign }
         dns["servers"] = servers
         dns["intercept-unmatched"] = options.dnsInterceptUnmatched
+        dns["fake-ip"] = [
+            "enabled": options.dnsFakeIpEnabled,
+            "range": options.dnsFakeIpRange
+        ]
         dns["ecs"] = [
             "enabled": options.dnsEcsEnabled,
             "override-ip": options.dnsEcsOverrideIp

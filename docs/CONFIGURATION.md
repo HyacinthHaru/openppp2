@@ -119,6 +119,8 @@ Important defaults from `Clear()` include:
 | `dns.servers.domestic` | `doh.pub` | Default domestic DNS provider |
 | `dns.servers.foreign` | `cloudflare` | Default foreign DNS provider |
 | `dns.intercept-unmatched` | `true` | Resolve unmatched DNS through `foreign -> domestic -> cloudflare` |
+| `dns.fake-ip.enabled` | `false` | Clash-style fake-ip; default off |
+| `dns.fake-ip.range` | `198.18.0.1/16` | Fake-ip pool CIDR |
 | `udp.inactive.timeout` | 72 s | UDP relay idle timeout |
 | `tcp.inactive.timeout` | 300 s | TCP relay idle timeout |
 | `tcp.connect.timeout` | 15 s | TCP connect attempt timeout |

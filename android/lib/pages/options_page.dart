@@ -41,6 +41,8 @@ class _OptionsPageState extends State<OptionsPage> {
   bool _allowLan = false;
   bool _blockQuic = false;
   bool _dnsInterceptUnmatched = true;
+  bool _dnsFakeIpEnabled = false;
+  final _dnsFakeIpRange = TextEditingController(text: '198.18.0.1/16');
   bool _dnsEcsEnabled = true;
   bool _dnsTlsVerifyPeer = true;
   LaunchRouteMode _routeMode = LaunchRouteMode.geo;
@@ -116,9 +118,11 @@ class _OptionsPageState extends State<OptionsPage> {
     _dnsForeign.text = (dnsCfg['foreign'] ?? '').toString();
     _dnsEcsOverride.text = (dnsCfg['ecsOverrideIp'] ?? '').toString();
     _dnsStunCandidates.text = (dnsCfg['stunCandidates'] ?? '').toString();
-    _dnsInterceptUnmatched = dnsCfg['interceptUnmatched'] == true;
-    _dnsEcsEnabled = dnsCfg['ecsEnabled'] == true;
-    _dnsTlsVerifyPeer = dnsCfg['tlsVerifyPeer'] == true;
+    _dnsInterceptUnmatched = dnsCfg['interceptUnmatched'] ?? true;
+    _dnsFakeIpEnabled = dnsCfg['fakeIpEnabled'] ?? false;
+    _dnsFakeIpRange.text = (dnsCfg['fakeIpRange'] ?? '198.18.0.1/16').toString();
+    _dnsEcsEnabled = dnsCfg['ecsEnabled'] ?? true;
+    _dnsTlsVerifyPeer = dnsCfg['tlsVerifyPeer'] ?? true;
 
     final geo = (m['geoRules'] is Map)
         ? Map<String, dynamic>.from(m['geoRules'] as Map)
@@ -150,6 +154,8 @@ class _OptionsPageState extends State<OptionsPage> {
         'domestic': _dnsDomestic.text.trim(),
         'foreign': _dnsForeign.text.trim(),
         'interceptUnmatched': _dnsInterceptUnmatched,
+        'fakeIpEnabled': _dnsFakeIpEnabled,
+        'fakeIpRange': _dnsFakeIpRange.text.trim(),
         'ecsEnabled': _dnsEcsEnabled,
         'ecsOverrideIp': _dnsEcsOverride.text.trim(),
         'tlsVerifyPeer': _dnsTlsVerifyPeer,
@@ -226,6 +232,7 @@ class _OptionsPageState extends State<OptionsPage> {
       _dnsDomestic,
       _dnsForeign,
       _dnsEcsOverride,
+      _dnsFakeIpRange,
       _dnsStunCandidates,
       _geoCountry,
       _geoIpDat,
@@ -346,6 +353,19 @@ class _OptionsPageState extends State<OptionsPage> {
                             ),
                           ],
                         ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _dnsFakeIpEnabled,
+                          title: const Text('Fake-IP'),
+                          subtitle: const Text('Clash 风格即时假 IP，后台解析真实地址'),
+                          onChanged: (v) => setState(() {
+                            _dnsFakeIpEnabled = v;
+                            _markDirty();
+                          }),
+                        ),
+                        if (_dnsFakeIpEnabled)
+                          _text(_dnsFakeIpRange, 'Fake-IP 地址池 (CIDR)',
+                              onChanged: _markDirty),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           value: _dnsEcsEnabled,

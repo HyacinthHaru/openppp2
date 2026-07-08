@@ -72,13 +72,19 @@ namespace ppp {
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::RuntimeSchedulerUnavailable, std::shared_ptr<VEthernetNetworkTcpipStack::TapTcpClient>(NULLPTR));
                 }
 
+                boost::asio::ip::tcp::endpoint connectEP = remoteEP;
+                const boost::asio::ip::address rewritten = ethernet->RewriteFakeIpAddress(remoteEP.address());
+                if (rewritten != remoteEP.address()) {
+                    connectEP = boost::asio::ip::tcp::endpoint(rewritten, remoteEP.port());
+                }
+
                 auto connection = make_shared_object<VEthernetNetworkTcpipConnection>(exchanger, context, strand);
                 if (NULLPTR == connection) {
                     ppp::telemetry::Log(ppp::telemetry::Level::kInfo, "tcpip_stack", "begin accept failed: allocation failed");
                     return ppp::diagnostics::SetLastError(ppp::diagnostics::ErrorCode::MemoryAllocationFailed, std::shared_ptr<VEthernetNetworkTcpipStack::TapTcpClient>(NULLPTR));
                 }
 
-                connection->Open(localEP, remoteEP);
+                connection->Open(localEP, connectEP);
                 ppp::telemetry::Log(ppp::telemetry::Level::kInfo, "tcpip_stack", "begin accept client local=%s:%u remote=%s:%u",
                     localEP.address().to_string().c_str(),
                     localEP.port(),

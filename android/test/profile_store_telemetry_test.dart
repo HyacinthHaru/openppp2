@@ -71,5 +71,24 @@ void main() {
       expect(block['enabled'], isFalse);
       expect(block['endpoint'], '');
     });
+    test('dns intercept-unmatched stays true when saved options omit the key', () {
+      final merged = ProfileStore.effectiveJson(
+        ProfileStore.defaultJson,
+        const {
+          'dnsConfig': {
+            'domestic': 'doh.pub',
+            'foreign': 'cloudflare',
+          },
+        },
+      );
+      final root = jsonDecode(merged) as Map<String, dynamic>;
+      final dns = root['dns'] as Map<String, dynamic>;
+
+      expect(dns['intercept-unmatched'], isTrue);
+      final ecs = dns['ecs'] as Map<String, dynamic>;
+      expect(ecs['enabled'], isTrue);
+      final tls = dns['tls'] as Map<String, dynamic>;
+      expect(tls['verify-peer'], isTrue);
+    });
   });
 }

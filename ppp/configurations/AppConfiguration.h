@@ -356,6 +356,10 @@ namespace ppp {
             struct {
                 ppp::vector<ppp::string>                            candidates;      ///< STUN server candidates for exit IP detection (ip:port or hostname:port).
             }                                                       stun;            ///< STUN server configuration for ECS fallback.
+            struct {
+                bool                                                enabled = false; ///< Return Clash-style fake IPs for A queries; default false.
+                ppp::string                                         range = "198.18.0.1/16"; ///< Assignable IPv4 CIDR for the fake-ip pool.
+            }                                                       fake_ip;         ///< Fake-ip mode (Plan C).
         }                                                           dns;             ///< DNS resolver extension configuration.
             GeoRulesConfiguration                                       geo_rules;       ///< GeoIP/GeoSite rule generation configuration (Phase G).
         public:
