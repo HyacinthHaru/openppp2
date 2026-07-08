@@ -156,8 +156,8 @@ namespace ppp {
 #if defined(_LINUX)
                 bool                                                                ProtectMode(bool* protect_mode) noexcept;
 #endif
-                std::shared_ptr<NetworkInterface>                                   GetTapNetworkInterface()        noexcept { return tun_ni_; }
-                std::shared_ptr<NetworkInterface>                                   GetUnderlyingNetworkInterface() noexcept { return underlying_ni_; }
+                std::shared_ptr<ClientNetworkInterface>                             GetTapNetworkInterface()        noexcept { return tun_ni_; }
+                std::shared_ptr<ClientNetworkInterface>                             GetUnderlyingNetworkInterface() noexcept { return underlying_ni_; }
                 virtual void                                                        PreferredNgw(const boost::asio::ip::address& gw) noexcept;
                 virtual void                                                        PreferredNic(const ppp::string& nic) noexcept;
                 virtual bool                                                        AddLoadIPList(
@@ -304,8 +304,8 @@ namespace ppp {
                 bool                                                                route_added_   = false;
                 bool                                                                route_apply_ready_ = false;
                 LoadIPListFileVectorPtr                                             ribs_;
-                std::shared_ptr<NetworkInterface>                                   tun_ni_;
-                std::shared_ptr<NetworkInterface>                                   underlying_ni_;
+                std::shared_ptr<ClientNetworkInterface>                             tun_ni_;
+                std::shared_ptr<ClientNetworkInterface>                             underlying_ni_;
                 ppp::string                                                         preferred_nic_;
                 boost::asio::ip::address                                            preferred_ngw_;
                 ppp::unordered_set<uint32_t>                                        dns_serverss_[3];

@@ -88,15 +88,6 @@ static bool AndroidDnsRedirectTraceEnabled() noexcept {
 #endif
 
 
-/** @brief Returns whether current platform supports managed IPv6 operations. */
-static bool ClientSupportsManagedIPv6() noexcept {
-#if defined(_WIN32) || defined(_LINUX) || defined(_MACOS)
-    return true;
-#else
-    return false;
-#endif
-}
-
 /** @brief Validates whether extensions describe an applicable managed IPv6 assignment. */
 static bool HasManagedIPv6Assignment(const ppp::app::protocol::VirtualEthernetInformationExtensions& extensions) noexcept {
     bool status_ok = extensions.IPv6StatusCode == ppp::app::protocol::VirtualEthernetInformationExtensions::IPv6Status_Applied ||
@@ -1138,15 +1129,11 @@ ANDROID_DNS_REDIRECT_TRACE( "icmp_other static_echo dst=%s ok=%d",
                     RestoreAssignedIPv6();
                 }
 
-                if (valid_ipv6_assignment) {
-                    if (!ClientSupportsManagedIPv6()) {
-                    }
-                    elif (extensions.AssignedIPv6Mode != VirtualEthernetInformationExtensions::IPv6Mode_Nat66 &&
-                        extensions.AssignedIPv6Mode != VirtualEthernetInformationExtensions::IPv6Mode_Gua) {
-                    }
-                    elif (!address_manager_.Ipv6Applied()) {
-                        ApplyAssignedIPv6(extensions);
-                    }
+                if (valid_ipv6_assignment &&
+                    (extensions.AssignedIPv6Mode == VirtualEthernetInformationExtensions::IPv6Mode_Nat66 ||
+                        extensions.AssignedIPv6Mode == VirtualEthernetInformationExtensions::IPv6Mode_Gua) &&
+                    !address_manager_.Ipv6Applied()) {
+                    ApplyAssignedIPv6(extensions);
                 }
 
                 // Apply server-assigned IPv4 address to TAP interface.

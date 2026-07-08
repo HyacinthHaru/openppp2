@@ -33,7 +33,7 @@ namespace ppp {
                 ppp::unordered_map<uint32_t, uint32_t>                          DefaultRoutes;
 #endif
 
-                ClientNetworkInterface() noexcept;
+                ClientNetworkInterface() noexcept : Index(-1) {}
                 virtual ~ClientNetworkInterface() noexcept = default;
             };
 

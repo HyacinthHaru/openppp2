@@ -6,7 +6,7 @@
 #include <ppp/app/server/VirtualInternetControlMessageProtocol.h>
 #include <ppp/app/server/VirtualInternetControlMessageProtocolStatic.h>
 #include <ppp/app/server/VirtualEthernetDatagramPortStatic.h>
-#include <ppp/app/server/VirtualEthernetIPv6.h>
+#include <ppp/app/protocol/VirtualEthernetIPv6.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/collections/Dictionary.h>
 #include <ppp/threading/Timer.h>
@@ -152,7 +152,7 @@ namespace {
             return false;
         }
 
-        ppp::app::server::VirtualEthernetIPv6MinimalHeader* header = reinterpret_cast<ppp::app::server::VirtualEthernetIPv6MinimalHeader*>(packet);
+        ppp::app::protocol::VirtualEthernetIPv6MinimalHeader* header = reinterpret_cast<ppp::app::protocol::VirtualEthernetIPv6MinimalHeader*>(packet);
         boost::asio::ip::address_v6 source;
         boost::asio::ip::address_v6 destination;
         ppp::Byte next_header = 0;
@@ -183,7 +183,7 @@ namespace {
 
         icmp->icmp_type = 129;
         icmp->icmp_chksum = 0;
-        icmp->icmp_chksum = ppp::app::server::VirtualEthernetIPv6PseudoChecksum(reinterpret_cast<unsigned char*>(icmp), icmp_length, gateway, source, IPPROTO_ICMPV6);
+        icmp->icmp_chksum = ppp::app::protocol::VirtualEthernetIPv6PseudoChecksum(reinterpret_cast<unsigned char*>(icmp), icmp_length, gateway, source, IPPROTO_ICMPV6);
         return true;
     }
 }
