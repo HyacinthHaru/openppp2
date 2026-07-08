@@ -4,7 +4,7 @@
 #include <ppp/app/client/VEthernetExchanger.h>
 #include <ppp/app/client/dns/DnsInterceptor.h>
 #include <ppp/transmissions/proxys/IForwarding.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <common/aggligator/aggligator.h>
 
 #if defined(_WIN32)

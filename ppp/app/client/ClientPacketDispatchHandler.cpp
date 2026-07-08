@@ -5,7 +5,7 @@
 #include <ppp/configurations/AppConfiguration.h>
 #include <ppp/collections/Dictionary.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/net/packet/UdpFrame.h>
 #include <ppp/net/packet/IcmpFrame.h>
 #include <ppp/net/native/ip.h>

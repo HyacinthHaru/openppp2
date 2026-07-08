@@ -7,7 +7,7 @@
 #include <ppp/app/client/dns/DnsInterceptor.h>
 #include <ppp/transmissions/ITransmissionQoS.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/IDisposable.h>
 #include <ppp/net/asio/vdns.h>
 #include <ppp/net/IPEndPoint.h>

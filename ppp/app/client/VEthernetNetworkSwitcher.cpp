@@ -15,7 +15,7 @@
 #include <ppp/coroutines/asio/asio.h>
 #include <ppp/coroutines/YieldContext.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 
 #include <ppp/threading/Timer.h>
 #include <ppp/threading/Executors.h>

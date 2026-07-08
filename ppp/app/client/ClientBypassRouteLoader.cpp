@@ -1,7 +1,7 @@
 #include <ppp/app/client/ClientBypassRouteLoader.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/diagnostics/Error.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/io/File.h>
 #include <ppp/net/IPEndPoint.h>
 #include <ppp/net/Socket.h>

@@ -1,7 +1,7 @@
 #include <ppp/app/client/AssignedAddressManager.h>
 #include <ppp/app/client/VEthernetNetworkSwitcher.h>
 #include <ppp/app/protocol/VirtualEthernetInformation.h>
-#include <ppp/diagnostics/Telemetry.h>
+#include <ppp/diagnostics/TelemetryFwd.h>
 #include <ppp/net/IPEndPoint.h>
 
 #include <chrono>
