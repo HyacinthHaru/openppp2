@@ -74,6 +74,16 @@ namespace ppp {
                 bool DeleteRoute(uint32_t ip, uint32_t gw, int prefix) noexcept;
 #endif
 
+                /**
+                 * @brief Returns true when hosted-network route apply should wait.
+                 *
+                 * @param route_apply_ready     Whether Open() finished preparing route state.
+                 * @param exchanger_established Whether the remote session is established.
+                 */
+                static bool ShouldDeferHostedRouteApply(bool route_apply_ready, bool exchanger_established) noexcept {
+                    return !route_apply_ready || !exchanger_established;
+                }
+
                 /** @brief Applies hosted-network routes once the remote session is established. */
                 bool TryApplyHostedNetworkRoutes() noexcept;
 
