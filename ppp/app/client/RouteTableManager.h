@@ -22,9 +22,10 @@ namespace ppp {
             /**
              * @brief Manages host OS route table entries for VPN connect/disconnect.
              *
-             * @details Extracted from VEthernetNetworkSwitcher (PR2a-1). Platform #ifdef
-             *          logic lives in RouteTableManager.cpp. Bind() must be called once
-             *          from the owning switcher constructor before any route operation.
+             * @details Extracted from VEthernetNetworkSwitcher (PR2a-1). Platform bodies
+             *          live in RouteTableManager_{mobile,win32,darwin,linux}.cpp. Bind()
+             *          must be called once from the owning switcher constructor before any
+             *          route operation.
              */
             class RouteTableManager {
             public:
