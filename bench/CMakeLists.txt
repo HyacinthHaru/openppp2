@@ -73,3 +73,13 @@ ppp_add_bench(bm_allocator SOURCES udp/bm_allocator.cpp
     support/bench_stubs.cpp support/bench_pool_stub.cpp support/buddy_impl.cpp
     ${PPP_POOL_SRCS})
 target_link_libraries(bm_allocator PRIVATE rt)
+
+# Phase 1 探索：aes-*-cfb(OpenSSL) 与 simd-aes-*(AES-NI) 密文互操作性验证（纯 main，不跑 benchmark）
+ppp_add_bench(compat_check SOURCES udp/compat_check.cpp
+    support/bench_stubs.cpp support/bench_alloc_stub.cpp
+    ${PPP_CRYPTO_SRCS} ${PPP_AESNI_IMPL_SRCS})
+
+# H4 TDD：EVP 透明加速 + simd-auto 开关
+ppp_add_bench(evp_simd_test SOURCES udp/evp_simd_test.cpp
+    support/bench_stubs.cpp support/bench_alloc_stub.cpp
+    ${PPP_CRYPTO_SRCS} ${PPP_AESNI_IMPL_SRCS})
