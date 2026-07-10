@@ -38,13 +38,21 @@ namespace ppp {
                     /** @brief Active application configuration. */
                     ppp::function<std::shared_ptr<ppp::configurations::AppConfiguration>()> get_configuration;
 
-                    /** @brief Reinject a fully-formed UDP-over-IPv4/6 packet back to the TUN (return path). */
-                    ppp::function<bool(const ppp::Byte* ip_packet, int ip_packet_size)> datagram_output;
+                    /** @brief Reinject an inbound datagram to the TUN. Matches switcher::DatagramOutput. */
+                    ppp::function<bool(const boost::asio::ip::udp::endpoint& source,
+                                       const boost::asio::ip::udp::endpoint& destination,
+                                       void* packet, int packet_size, bool caching)> datagram_output;
 
-                    /** @brief Rewrite a fake-ip destination to its real address in place; false when unchanged. */
-                    ppp::function<bool(ppp::Byte* ip_packet, int ip_packet_size)> rewrite_fakeip;
+                    /** @brief Rewrite a fake-ip address to its real one. Matches switcher::RewriteFakeIpAddress. */
+                    ppp::function<boost::asio::ip::address(const boost::asio::ip::address& address)> rewrite_fakeip;
 
-                    /** @brief Send a datagram to the server via the link-layer SENDTO command. */
+                    /**
+                     * @brief Send a datagram to the server (link-layer SENDTO).
+                     * @note P2-c: the real VirtualEthernetLinklayer::DoSendTo also needs the active
+                     *       ITransmission + a coroutine YieldContext; the manager will supply those from
+                     *       its own session state rather than through this value-typed port. Kept here as
+                     *       the intended surface; wiring resolves the coroutine plumbing in P2-c.
+                     */
                     ppp::function<bool(int in_protocol,
                                        const boost::asio::ip::udp::endpoint& source,
                                        const boost::asio::ip::udp::endpoint& destination,
