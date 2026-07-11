@@ -1,4 +1,7 @@
+#include "datagram_manager_stubs.h"
+
 #include <ppp/configurations/AppConfiguration.h>
+#include <ppp/diagnostics/Error.h>
 #include <ppp/app/client/VEthernetDatagramPort.h>
 
 /**
@@ -7,8 +10,8 @@
  *
  * Replaces the real port implementation (which drags in the exchanger, transmissions and
  * coroutines) with a spyable no-op. The manager only shuffles/ages ports and calls their
- * public/virtual surface, so recording construct/dispose/sendto/onmessage/finalize here is
- * enough to assert the session-table, data-plane and GC behaviour in isolation.
+ * public/virtual surface, so recording construct/dispose/sendto/onmessage here is enough to
+ * assert the session-table, data-plane and GC behaviour in isolation.
  */
 
 namespace ppp {
@@ -17,18 +20,9 @@ namespace ppp {
             namespace udp {
                 namespace test {
 
-                    struct DatagramPortSpy final {
-                        int construct = 0;
-                        int destruct = 0;
-                        int dispose = 0;
-                        int sendto = 0;
-                        int onmessage = 0;
-                        int finalize = 0;
-
-                        void Reset() noexcept {
-                            construct = destruct = dispose = sendto = onmessage = finalize = 0;
-                        }
-                    };
+                    void DatagramPortSpy::Reset() noexcept {
+                        construct = destruct = dispose = sendto = onmessage = finalize = 0;
+                    }
 
                     DatagramPortSpy& DatagramPortSpyInstance() noexcept {
                         static DatagramPortSpy spy;
@@ -81,5 +75,16 @@ namespace ppp {
             }
 
         }
+    }
+}
+
+namespace ppp {
+    namespace diagnostics {
+
+        // Stub the error-code sink so SetLastError() links without the ErrorHandler/Executors chain.
+        ErrorCode SetLastErrorCode(ErrorCode code) noexcept {
+            return code;
+        }
+
     }
 }

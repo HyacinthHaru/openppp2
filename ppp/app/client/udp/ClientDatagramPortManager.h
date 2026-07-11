@@ -16,6 +16,12 @@
 #include <ppp/app/client/udp/UdpRelayHost.h>
 
 namespace ppp {
+    namespace coroutines {
+        class YieldContext;
+    }
+}
+
+namespace ppp {
     namespace app {
         namespace client {
             namespace udp {
@@ -38,6 +44,24 @@ namespace ppp {
                     VEthernetDatagramPortPtr GetDatagramPort(const boost::asio::ip::udp::endpoint& source) noexcept;
                     /** @brief Remove and return the datagram port for source, or null. */
                     VEthernetDatagramPortPtr ReleaseDatagramPort(const boost::asio::ip::udp::endpoint& source) noexcept;
+
+                    /** @brief Send a UDP datagram to the server via the source-bound relay port. */
+                    bool SendTo(const boost::asio::ip::udp::endpoint& source, const boost::asio::ip::udp::endpoint& destination,
+                                const void* packet, int packet_size) noexcept;
+                    /** @brief Route an inbound datagram to its port, a local handler, or the TUN. */
+                    bool ReceiveFromDestination(const boost::asio::ip::udp::endpoint& source, const boost::asio::ip::udp::endpoint& destination,
+                                                ppp::Byte* packet, int packet_length) noexcept;
+                    /** @brief Link-layer inbound entry point; forwards to ReceiveFromDestination. */
+                    bool OnSendTo(const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& source,
+                                  const boost::asio::ip::udp::endpoint& destination, ppp::Byte* packet, int packet_length,
+                                  ppp::coroutines::YieldContext& y) noexcept;
+                    /** @brief Dispatch an inbound datagram to a registered local handler, if any. */
+                    bool TryHandleDatagram(const boost::asio::ip::udp::endpoint& source, const boost::asio::ip::udp::endpoint& destination,
+                                           void* packet, int packet_size) noexcept;
+                    /** @brief Register a local proxy reply handler for source. */
+                    bool RegisterDatagramHandler(const boost::asio::ip::udp::endpoint& source, const DatagramPacketHandler& handler) noexcept;
+                    /** @brief Remove a local proxy reply handler and finalize any bound port. */
+                    bool ReleaseDatagramHandler(const boost::asio::ip::udp::endpoint& source) noexcept;
 
                 private:
                     UdpRelayHostPorts                                                    ports_;
