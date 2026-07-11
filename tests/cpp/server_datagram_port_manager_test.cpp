@@ -18,7 +18,7 @@ boost::asio::ip::udp::endpoint Ep(const char* address, unsigned short port) noex
 udp_server::VirtualEthernetDatagramPortPtr MakeStubPort(const udp_server::ITransmissionPtr& transmission,
                                                         const boost::asio::ip::udp::endpoint& source) noexcept {
     return std::make_shared<ppp::app::server::VirtualEthernetDatagramPort>(
-        std::shared_ptr<ppp::app::server::VirtualEthernetExchanger>(), transmission, source);
+        std::shared_ptr<ppp::app::server::VirtualEthernetExchanger>(), udp_server::ServerUdpRelayHostPorts(), transmission, source);
 }
 
 udp_server::ServerUdpRelayHostPorts MakeFilledPorts() noexcept {
@@ -27,6 +27,13 @@ udp_server::ServerUdpRelayHostPorts MakeFilledPorts() noexcept {
                            const boost::asio::ip::udp::endpoint& source) noexcept { return MakeStubPort(transmission, source); };
     ports.on_port_opened = [](const udp_server::ITransmissionPtr&,
                               const udp_server::VirtualEthernetDatagramPortPtr&) noexcept {};
+    ports.get_configuration = []() noexcept { return std::shared_ptr<ppp::configurations::AppConfiguration>(); };
+    ports.do_send_to = [](const udp_server::ITransmissionPtr&, const boost::asio::ip::udp::endpoint&,
+                          const boost::asio::ip::udp::endpoint&, ppp::Byte*, int,
+                          ppp::coroutines::YieldContext&) noexcept { return true; };
+    ports.release_port = [](const boost::asio::ip::udp::endpoint&) noexcept {};
+    ports.get_interface_ip = []() noexcept { return boost::asio::ip::address(); };
+    ports.namespace_query = [](const void*, int) noexcept { return true; };
     return ports;
 }
 

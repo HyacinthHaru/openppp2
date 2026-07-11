@@ -7,6 +7,7 @@
 #include <ppp/app/server/VirtualInternetControlMessageProtocol.h>
 #include <ppp/app/server/VirtualInternetControlMessageProtocolStatic.h>
 #include <ppp/app/server/VirtualEthernetDatagramPortStatic.h>
+#include <ppp/app/server/VirtualEthernetNamespaceCache.h>
 #include <ppp/app/protocol/VirtualEthernetIPv6.h>
 #include <ppp/auxiliary/StringAuxiliary.h>
 #include <ppp/collections/Dictionary.h>
@@ -256,6 +257,20 @@ namespace ppp {
 
                         ppp::telemetry::Log(Level::kDebug, "exchanger", "datagram port opened");
                     };
+                host.get_configuration = [self]() noexcept { return self->GetConfiguration(); };
+                // do_send_to mirrors the link-layer SENDTO; the port supplies its own transmission and
+                // coroutine yield context. release_port lets a port deregister itself on finalize.
+                host.do_send_to =
+                    [self](const udp::ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& source,
+                           const boost::asio::ip::udp::endpoint& destination, ppp::Byte* packet, int packet_length,
+                           ppp::coroutines::YieldContext& y) noexcept {
+                        return self->DoSendTo(transmission, source, destination, packet, packet_length, y);
+                    };
+                host.release_port =
+                    [self](const boost::asio::ip::udp::endpoint& source) noexcept { self->ReleaseDatagramPort(source); };
+                host.get_interface_ip = [self]() noexcept { return self->switcher_->GetInterfaceIP(); };
+                host.namespace_query =
+                    [self](const void* packet, int packet_length) noexcept { return NamespaceQueryCache(self->switcher_, packet, packet_length); };
                 return host;
             }
 
@@ -847,6 +862,94 @@ namespace ppp {
             }
 
             /** @brief Forwards one UDP payload to destination through cached/new datagram port. */
+            bool VirtualEthernetExchanger::NamespaceQueryCache(
+                const std::shared_ptr<VirtualEthernetSwitcher>&     switcher,
+                const void*                                         packet,
+                int                                                 packet_length) noexcept {
+
+                auto cache = switcher->GetNamespaceCache();
+                if (NULLPTR == cache) {
+                    ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::DnsCacheFailed);
+                    return false;
+                }
+
+                uint16_t queries_type = 0;
+                uint16_t queries_clazz = 0;
+                ppp::string domain = ppp::net::native::dns::ExtractHostY((Byte*)packet, packet_length,
+                    [&queries_type, &queries_clazz](ppp::net::native::dns::dns_hdr* h, ppp::string& domain, uint16_t type, uint16_t clazz) noexcept -> bool {
+                        queries_type = type;
+                        queries_clazz = clazz;
+                        return true;
+                    });
+
+                if (domain.empty()) {
+                    ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::DnsPacketInvalid);
+                    return false;
+                }
+
+                std::shared_ptr<Byte> response = make_shared_alloc<Byte>(packet_length);
+                if (NULLPTR == response) {
+                    ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::MemoryAllocationFailed);
+                    return false;
+                }
+
+                ppp::string queries_key = VirtualEthernetNamespaceCache::QueriesKey(queries_type, queries_clazz, domain);
+                memcpy(response.get(), packet, packet_length);
+
+                return cache->Add(queries_key, response, packet_length);
+            }
+
+            int VirtualEthernetExchanger::NamespaceQueryReply(
+                const boost::asio::ip::udp::endpoint&               sourceEP,
+                const boost::asio::ip::udp::endpoint&               destinationEP,
+                const ppp::string&                                  domain,
+                const void*                                         packet,
+                int                                                 packet_length,
+                uint16_t                                            queries_type,
+                uint16_t                                            queries_clazz,
+                bool                                                static_transit) noexcept {
+
+                using dns_hdr = ppp::net::native::dns::dns_hdr;
+
+                if (NULLPTR != packet && packet_length >= sizeof(dns_hdr)) {
+                    if (domain.size() > 0) {
+                        auto cache = switcher_->GetNamespaceCache();
+                        if (NULLPTR != cache) {
+                            std::shared_ptr<Byte> response;
+                            int response_length;
+
+                            ppp::string queries_key = VirtualEthernetNamespaceCache::QueriesKey(queries_type, queries_clazz, domain);
+                            if (cache->Get(queries_key, response, response_length, ((dns_hdr*)packet)->usTransID)) {
+                                ITransmissionPtr transmission = GetTransmission();
+                                if (NULLPTR != transmission) {
+                                    boost::asio::ip::udp::endpoint remoteEP = Ipep::V6ToV4(destinationEP);
+                                    if (static_transit) {
+                                        bool outputed = VirtualEthernetDatagramPortStatic::Output(switcher_.get(),
+                                            this, response.get(), response_length, sourceEP, remoteEP);
+                                        if (outputed) {
+                                            return 1;
+                                        }
+                                        else {
+                                            return -1;
+                                        }
+                                    }
+                                    elif(DoSendTo(transmission, sourceEP, remoteEP, response.get(), response_length, nullof<YieldContext>())) {
+                                        return 1;
+                                    }
+                                    else {
+                                        ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::UdpRelayFailed);
+                                        transmission->Dispose();
+                                        return -1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
             bool VirtualEthernetExchanger::SendPacketToDestination(const ITransmissionPtr& transmission,
                 const boost::asio::ip::udp::endpoint&   sourceEP,
                 const boost::asio::ip::udp::endpoint&   destinationEP,
@@ -914,7 +1017,7 @@ namespace ppp {
                         ppp::telemetry::Log(Level::kDebug, "exchanger", "dns query host empty error=%d length=%d", static_cast<int>(dns_error), packet_length);
                     }
 
-                    int status = VirtualEthernetDatagramPort::NamespaceQuery(switcher_, this, sourceEP, destinationEP, hostDomain,
+                    int status = NamespaceQueryReply(sourceEP, destinationEP, hostDomain,
                         packet, packet_length, queries_type, queries_clazz, false);
                     if (status < 0) {
                         ppp::diagnostics::SetLastErrorCode(ppp::diagnostics::ErrorCode::DnsResolveFailed);
@@ -1077,7 +1180,7 @@ socket->send_to(boost::asio::buffer(packet.get(), packet_length), redirectEP,
 
                                 AppConfigurationPtr configuration = GetConfiguration();
                                 if (NULLPTR != configuration && configuration->udp.dns.cache) {
-                                    VirtualEthernetDatagramPort::NamespaceQuery(switcher_, recv_buffer.get(), bytes_transferred);
+                                    NamespaceQueryCache(switcher_, recv_buffer.get(), bytes_transferred);
                                 }
                             }
                         }
@@ -1389,7 +1492,7 @@ socket->send_to(boost::asio::buffer(packet.get(), packet_length), redirectEP,
 
                 auto my = shared_from_this();
                 auto self = std::dynamic_pointer_cast<VirtualEthernetExchanger>(my);
-                return make_shared_object<VirtualEthernetDatagramPort>(self, transmission, sourceEP);
+                return make_shared_object<VirtualEthernetDatagramPort>(self, BuildServerUdpRelayHostPorts(), transmission, sourceEP);
             }
 
             /** @brief Finds a cached datagram port by source endpoint key. */
@@ -1846,7 +1949,7 @@ socket->send_to(boost::asio::buffer(packet.get(), packet_length), redirectEP,
                     boost::asio::ip::udp::endpoint sourceEP =
                         IPEndPoint::ToEndPoint<boost::asio::ip::udp>(IPEndPoint(source_ip, source_port));
 
-                    int status = VirtualEthernetDatagramPort::NamespaceQuery(switcher_, this, sourceEP, destinationEP, hostDomain,
+                    int status = NamespaceQueryReply(sourceEP, destinationEP, hostDomain,
                         messages.get(), packet->Length, queries_type, queries_clazz, true);
                     if (status < 0) {
                         return false;

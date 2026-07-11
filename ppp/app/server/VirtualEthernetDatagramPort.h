@@ -38,6 +38,7 @@
 namespace ppp::configurations { class AppConfiguration; }
 #include <ppp/threading/Executors.h>
 #include <ppp/transmissions/ITransmission.h>
+#include <ppp/app/server/udp/ServerUdpRelayHost.h>
 
 namespace ppp {
     namespace app {
@@ -54,8 +55,6 @@ namespace ppp {
              *          `NamespaceQuery` static helpers.
              */
             class VirtualEthernetDatagramPort : public std::enable_shared_from_this<VirtualEthernetDatagramPort> {
-                friend class                                            VirtualEthernetExchanger;
-
             public:
                 typedef ppp::configurations::AppConfiguration           AppConfiguration;
                 typedef std::shared_ptr<AppConfiguration>               AppConfigurationPtr;
@@ -73,7 +72,7 @@ namespace ppp {
                  * @param transmission Transmission channel used to forward received packets back to the client.
                  * @param sourceEP    Client-side UDP source endpoint represented by this port.
                  */
-                VirtualEthernetDatagramPort(const VirtualEthernetExchangerPtr& exchanger, const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept;
+                VirtualEthernetDatagramPort(const VirtualEthernetExchangerPtr& exchanger, ppp::app::server::udp::ServerUdpRelayHostPorts ports, const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept;
 
                 /**
                  * @brief Finalizes resources and unregisters the port from the owner exchanger.
@@ -86,8 +85,6 @@ namespace ppp {
             public:
                 /** @brief Returns a shared self-reference via `shared_from_this()`. */
                 std::shared_ptr<VirtualEthernetDatagramPort>            GetReference() noexcept      { return shared_from_this(); }
-                /** @brief Returns the owner exchanger. */
-                VirtualEthernetExchangerPtr                             GetExchanger() noexcept      { return exchanger_; }
                 /** @brief Returns the io_context associated with this port. */
                 ContextPtr                                              GetContext() noexcept        { return context_; }
                 /** @brief Returns the application configuration snapshot. */
@@ -141,52 +138,6 @@ namespace ppp {
                  */
                 void                                                    MarkFinalize() noexcept { finalize_ = true; }
 
-            public:
-                /**
-                 * @brief Parses a DNS response packet and inserts it into the switcher's namespace cache.
-                 *
-                 * @param switcher       Switcher that provides access to the namespace cache.
-                 * @param packet         Raw DNS response packet buffer.
-                 * @param packet_length  Packet size in bytes.
-                 * @return True if the DNS response is successfully added to the cache.
-                 */
-                static bool                                             NamespaceQuery(
-                    const std::shared_ptr<VirtualEthernetSwitcher>&     switcher,
-                    const void*                                         packet,
-                    int                                                 packet_length) noexcept;
-
-                /**
-                 * @brief Tries to answer a DNS query from the cache and outputs the cached response.
-                 *
-                 * @details If a valid cache entry exists for the query key, the cached response is
-                 *          rewritten with the query transaction ID and forwarded to the client.
-                 *
-                 * @param switcher       Switcher providing access to the namespace cache.
-                 * @param exchanger      Exchanger used to select the output forwarding path.
-                 * @param sourceEP       Logical UDP source endpoint of the original query.
-                 * @param destinationEP  Logical UDP destination endpoint of the original query.
-                 * @param domain         Domain name string parsed from the DNS query.
-                 * @param packet         Original DNS query packet buffer.
-                 * @param packet_length  Query packet size in bytes.
-                 * @param queries_type   DNS query type (e.g. A, AAAA).
-                 * @param queries_clazz  DNS query class (e.g. IN).
-                 * @param static_transit True to use the static-echo transit output path.
-                 * @return  1 if answered from cache,
-                 *          0 if no cache hit,
-                 *         -1 if a cache hit exists but forwarding to the client fails.
-                 */
-                static int                                              NamespaceQuery(
-                    const std::shared_ptr<VirtualEthernetSwitcher>&     switcher,
-                    VirtualEthernetExchanger*                           exchanger,
-                    const boost::asio::ip::udp::endpoint&               sourceEP,
-                    const boost::asio::ip::udp::endpoint&               destinationEP,
-                    const ppp::string&                                  domain,
-                    const void*                                         packet,
-                    int                                                 packet_length,
-                    uint16_t                                            queries_type,
-                    uint16_t                                            queries_clazz,
-                    bool                                                static_transit) noexcept;
-
             private:
                 /** @brief Closes the UDP socket and releases the transmission reference. */
                 void                                                    Finalize() noexcept;
@@ -230,7 +181,8 @@ namespace ppp {
                 };
                 std::shared_ptr<boost::asio::io_context>                context_;           ///< io_context for async operations.
                 boost::asio::ip::udp::socket                            socket_;            ///< UDP socket for outbound/inbound traffic.
-                VirtualEthernetExchangerPtr                             exchanger_;         ///< Owner exchanger.
+                ppp::app::server::udp::ServerUdpRelayHostPorts          ports_;             ///< Injected exchanger/switcher capabilities (P2-e-2).
+                VirtualEthernetExchangerPtr                             exchanger_;         ///< Lifecycle anchor only; never dereferenced (P2-e-2).
                 ITransmissionPtr                                        transmission_;      ///< Session transmission channel.
                 AppConfigurationPtr                                     configuration_;     ///< Application configuration snapshot.
                 std::shared_ptr<Byte>                                   buffer_;            ///< Thread-local 64KB receive buffer.

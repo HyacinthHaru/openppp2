@@ -82,7 +82,6 @@ namespace ppp {
             class VirtualEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer, public udp::IServerUdpRelayHost {
                 friend class                                                                VirtualInternetControlMessageProtocolStatic;
                 friend class                                                                VirtualEthernetSwitcher;
-                friend class                                                                VirtualEthernetDatagramPort;
                 friend class                                                                VirtualEthernetDatagramPortStatic;
 
             public:
@@ -200,6 +199,9 @@ namespace ppp {
             public:
                 /** @brief IServerUdpRelayHost: hands the datagram manager the exchanger capabilities it needs (P2-e). */
                 udp::ServerUdpRelayHostPorts                                                 BuildServerUdpRelayHostPorts() noexcept override;
+
+                /** @brief Parses a DNS response and stores it in the switcher namespace cache (moved off the port, P2-e-2). */
+                static bool                                                                 NamespaceQueryCache(const std::shared_ptr<VirtualEthernetSwitcher>& switcher, const void* packet, int packet_length) noexcept;
 
             protected:  
                 /**
@@ -453,6 +455,8 @@ namespace ppp {
                  * @brief Uploads per-session rx/tx traffic deltas to the managed server.
                  * @return True if the upload is queued or sent successfully.
                  */
+                int                                                                         NamespaceQueryReply(const boost::asio::ip::udp::endpoint& sourceEP, const boost::asio::ip::udp::endpoint& destinationEP, const ppp::string& domain, const void* packet, int packet_length, uint16_t queries_type, uint16_t queries_clazz, bool static_transit) noexcept;
+
                 bool                                                                        UploadTrafficToManagedServer() noexcept;
 
                 /**

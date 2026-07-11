@@ -169,7 +169,7 @@ namespace ppp {
                                 if (configuration_->udp.dns.cache) {
                                     int remotePort = remoteEP.port();
                                     if (remotePort == PPP_DNS_SYS_PORT) {
-                                        VirtualEthernetDatagramPort::NamespaceQuery(switcher_, buffer_.get(), bytes_transferred);
+                                        VirtualEthernetExchanger::NamespaceQueryCache(switcher_, buffer_.get(), bytes_transferred);
                                     }
                                 }
                             }

@@ -47,7 +47,7 @@ namespace ppp {
         namespace server {
 
             VirtualEthernetDatagramPort::VirtualEthernetDatagramPort(const VirtualEthernetExchangerPtr& exchanger,
-                const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept
+                udp::ServerUdpRelayHostPorts ports, const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept
                 : disposed_(false)
                 , onlydns_(true)
                 , sendto_(false)
@@ -56,6 +56,7 @@ namespace ppp {
                 , timeout_(0)
                 , context_(StubIoContext())
                 , socket_(*context_)
+                , ports_(std::move(ports))
                 , exchanger_(exchanger)
                 , transmission_(transmission)
                 , sourceEP_(sourceEP) {
