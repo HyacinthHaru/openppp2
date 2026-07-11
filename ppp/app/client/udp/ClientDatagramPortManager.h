@@ -31,6 +31,14 @@ namespace ppp {
                     /** @brief Whether the injected ports surface is complete. */
                     bool IsValid() const noexcept;
 
+                    /** @brief Find-or-create the datagram port bound to source (deduplicated). */
+                    VEthernetDatagramPortPtr AddNewDatagramPort(const ITransmissionPtr& transmission,
+                                                                const boost::asio::ip::udp::endpoint& source) noexcept;
+                    /** @brief Look up the datagram port for source, or null. */
+                    VEthernetDatagramPortPtr GetDatagramPort(const boost::asio::ip::udp::endpoint& source) noexcept;
+                    /** @brief Remove and return the datagram port for source, or null. */
+                    VEthernetDatagramPortPtr ReleaseDatagramPort(const boost::asio::ip::udp::endpoint& source) noexcept;
+
                 private:
                     UdpRelayHostPorts                                                    ports_;
                     /** @brief Independent lock guarding datagrams_ and datagram_handlers_. */

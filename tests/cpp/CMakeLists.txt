@@ -141,5 +141,8 @@ openppp2_add_cpp_test(exchanger_static_echo_channel_test SOURCES
 openppp2_add_cpp_test(route_table_manager_test SOURCES route_table_manager_test.cpp)
 openppp2_add_cpp_test(client_datagram_port_manager_test SOURCES
     client_datagram_port_manager_test.cpp
+    support/datagram_manager_stubs.cpp
+    support/ppp_test_stubs.cpp
+    "${OPENPPP2_ROOT}/ppp/hash/hash_bytes.cpp"
     "${OPENPPP2_ROOT}/ppp/app/client/udp/ClientDatagramPortManager.cpp"
     "${OPENPPP2_ROOT}/ppp/app/client/udp/UdpRelayHost.cpp")
