@@ -63,6 +63,10 @@ namespace ppp {
                     /** @brief Remove a local proxy reply handler and finalize any bound port. */
                     bool ReleaseDatagramHandler(const boost::asio::ip::udp::endpoint& source) noexcept;
 
+                    /** @brief NAT-timeout sweep: dispose aging ports two-phase (collect/erase under
+                     *         lock, dispose outside it) with an identity check to survive races. */
+                    void Tick(UInt64 now) noexcept;
+
                 private:
                     UdpRelayHostPorts                                                    ports_;
                     /** @brief Independent lock guarding datagrams_ and datagram_handlers_. */

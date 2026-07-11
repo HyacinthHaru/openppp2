@@ -181,6 +181,52 @@ namespace ppp {
                     return removed;
                 }
 
+                void ClientDatagramPortManager::Tick(UInt64 now) noexcept {
+                    // Phase 1: snapshot the table under the lock.
+                    ppp::vector<std::pair<boost::asio::ip::udp::endpoint, VEthernetDatagramPortPtr>> candidates;
+                    {
+                        std::lock_guard<std::mutex> scope(syncobj_);
+                        candidates.reserve(datagrams_.size());
+                        for (auto&& kv : datagrams_) {
+                            candidates.emplace_back(kv.first, kv.second);
+                        }
+                    }
+
+                    // Phase 2: decide aging outside the lock (IsPortAging is cheap and non-reentrant).
+                    ppp::vector<std::pair<boost::asio::ip::udp::endpoint, VEthernetDatagramPortPtr>> stale_candidates;
+                    for (auto&& kv : candidates) {
+                        VEthernetDatagramPortPtr& datagram = kv.second;
+                        if (NULLPTR == datagram || datagram->IsPortAging(now)) {
+                            stale_candidates.emplace_back(kv.first, datagram);
+                        }
+                    }
+
+                    // Phase 3: erase under the lock, but only if the entry is still the same object
+                    // (identity check guards against a port replaced during the unlocked window).
+                    ppp::vector<VEthernetDatagramPortPtr> stale;
+                    {
+                        std::lock_guard<std::mutex> scope(syncobj_);
+                        for (auto&& stale_candidate : stale_candidates) {
+                            auto tail = datagrams_.find(stale_candidate.first);
+                            auto endl = datagrams_.end();
+                            if (tail == endl || tail->second != stale_candidate.second) {
+                                continue;
+                            }
+
+                            VEthernetDatagramPortPtr datagram = std::move(tail->second);
+                            datagrams_.erase(tail);
+                            if (NULLPTR != datagram) {
+                                stale.emplace_back(std::move(datagram));
+                            }
+                        }
+                    }
+
+                    // Phase 4: dispose outside the lock so Dispose->Finalize->Release cannot self-deadlock.
+                    for (auto&& datagram : stale) {
+                        datagram->Dispose();
+                    }
+                }
+
             }
         }
     }

@@ -7,6 +7,9 @@
 
 #include "support/datagram_manager_stubs.h"
 
+#include <atomic>
+#include <thread>
+
 namespace udp_client = ppp::app::client::udp;
 namespace spy_ns = ppp::app::client::udp::test;
 
@@ -161,4 +164,60 @@ BOOST_AUTO_TEST_CASE(datagram_handler_register_dispatch_release) {
     BOOST_TEST(m.ReleaseDatagramHandler(src));
     m.ReceiveFromDestination(src, Ep("1.1.1.1", 53), buf, static_cast<int>(sizeof(buf)));
     BOOST_TEST(handled == 1);   // handler no longer dispatched after release
+}
+
+BOOST_AUTO_TEST_CASE(tick_disposes_aging_ports) {
+    spy_ns::DatagramPortSpyInstance().Reset();
+    udp_client::ClientDatagramPortManager m(MakeFilledPorts());
+
+    boost::asio::ip::udp::endpoint src = Ep("10.0.0.8", 1200);
+    m.AddNewDatagramPort(udp_client::ITransmissionPtr(), src);
+    BOOST_TEST((m.GetDatagramPort(src) != nullptr));
+
+    m.Tick(1000);   // stub port has timeout_ == 0, so IsPortAging(1000) is true
+
+    BOOST_TEST((m.GetDatagramPort(src) == nullptr));              // aged out of the table
+    BOOST_TEST(spy_ns::DatagramPortSpyInstance().dispose == 1);   // disposed outside the lock
+}
+
+BOOST_AUTO_TEST_CASE(tick_on_empty_table_is_noop) {
+    spy_ns::DatagramPortSpyInstance().Reset();
+    udp_client::ClientDatagramPortManager m(MakeFilledPorts());
+    m.Tick(1000);
+    BOOST_TEST(spy_ns::DatagramPortSpyInstance().dispose == 0);
+}
+
+BOOST_AUTO_TEST_CASE(concurrent_send_receive_tick_no_uaf) {
+    udp_client::ClientDatagramPortManager m(MakeFilledPorts());
+    std::atomic<int> sent{0};
+
+    auto sender = [&]() {
+        for (int i = 0; i < 4000; ++i) {
+            int payload = i;
+            m.SendTo(Ep("10.1.0.1", static_cast<unsigned short>(2000 + (i % 128))),
+                     Ep("8.8.8.8", 53), &payload, static_cast<int>(sizeof(payload)));
+            sent.fetch_add(1, std::memory_order_relaxed);
+        }
+    };
+    auto receiver = [&]() {
+        for (int i = 0; i < 4000; ++i) {
+            int payload = i;
+            m.ReceiveFromDestination(Ep("10.1.0.1", static_cast<unsigned short>(2000 + (i % 128))),
+                                     Ep("1.1.1.1", 53), reinterpret_cast<ppp::Byte*>(&payload),
+                                     static_cast<int>(sizeof(payload)));
+        }
+    };
+    auto sweeper = [&]() {
+        for (int i = 0; i < 4000; ++i) {
+            m.Tick(static_cast<std::uint64_t>(1000 + i));
+        }
+    };
+
+    std::thread t1(sender), t2(sender), t3(receiver), t4(sweeper);
+    t1.join();
+    t2.join();
+    t3.join();
+    t4.join();
+
+    BOOST_TEST(sent.load() == 8000);   // both senders completed without a crash under ASan
 }
