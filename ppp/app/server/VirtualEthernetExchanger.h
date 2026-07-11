@@ -42,6 +42,7 @@
 #include <ppp/app/protocol/VirtualEthernetMappingPort.h>
 #include <ppp/app/protocol/VirtualEthernetPacket.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
+#include <ppp/app/server/udp/ServerUdpRelayHost.h>
 #include <ppp/app/mux/vmux_net.h>
 #include <ppp/diagnostics/LinkTelemetry.h>
 #include <ppp/net/Ipep.h>
@@ -61,6 +62,10 @@ namespace ppp {
             class VirtualInternetControlMessageProtocol;
             class VirtualInternetControlMessageProtocolStatic;
 
+            namespace udp {
+                class ServerDatagramPortManager;
+            }
+
             /**
              * @brief Handles one client session's L2/L3 forwarding, NAT, and control operations.
              *
@@ -74,7 +79,7 @@ namespace ppp {
              *       and the static ICMP/datagram helper classes is required so that those
              *       classes can access internal state without exposing it via public API.
              */
-            class VirtualEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer {
+            class VirtualEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer, public udp::IServerUdpRelayHost {
                 friend class                                                                VirtualInternetControlMessageProtocolStatic;
                 friend class                                                                VirtualEthernetSwitcher;
                 friend class                                                                VirtualEthernetDatagramPort;
@@ -191,6 +196,10 @@ namespace ppp {
                  * @param fd TUN fd value; -1 to clear.
                  */
                 void                                                                        SetPreferredTunFd(int fd) noexcept;
+
+            public:
+                /** @brief IServerUdpRelayHost: hands the datagram manager the exchanger capabilities it needs (P2-e). */
+                udp::ServerUdpRelayHostPorts                                                 BuildServerUdpRelayHostPorts() noexcept override;
 
             protected:  
                 /**
@@ -655,7 +664,7 @@ namespace ppp {
                 FirewallPtr                                                                 firewall_;                  ///< Session-level firewall (may fall back to switcher-level).
                 TimeoutEventHandlerTable                                                    timeouts_;                  ///< Active DNS redirect timeout handlers.
                 VirtualInternetControlMessageProtocolPtr                                    echo_;                      ///< ICMP echo forwarding helper.
-                VirtualEthernetDatagramPortTable                                            datagrams_;                 ///< Active UDP relay ports keyed by source endpoint.
+                std::unique_ptr<udp::ServerDatagramPortManager>                             datagram_manager_;          ///< Owns the UDP relay session table (extracted P2-e).
                 ITransmissionPtr                                                            transmission_;              ///< Active session transmission channel.
                 VirtualEthernetManagedServerPtr                                             managed_server_;            ///< Go managed-server bridge reference.
                 ITransmissionStatisticsPtr                                                  statistics_last_;           ///< Statistics snapshot from the previous upload tick.

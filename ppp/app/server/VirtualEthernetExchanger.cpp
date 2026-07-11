@@ -1,5 +1,6 @@
 #include <ppp/configurations/AppConfiguration.h>
 #include <ppp/app/server/VirtualEthernetExchanger.h>
+#include <ppp/app/server/udp/ServerDatagramPortManager.h>
 #include <ppp/app/server/VirtualEthernetSwitcher.h>
 #include <ppp/app/server/VirtualEthernetDatagramPort.h>
 #include <ppp/app/server/VirtualEthernetManagedServer.h>
@@ -211,6 +212,7 @@ namespace ppp {
                 buffer_ = Executors::GetCachedBuffer(context);
                 firewall_ = switcher->GetFirewall();
                 managed_server_ = switcher->GetManagedServer();
+                datagram_manager_ = std::make_unique<udp::ServerDatagramPortManager>(BuildServerUdpRelayHostPorts());
 
                 for (;;) {
                     ITransmissionPtr transmission = transmission_;
@@ -230,6 +232,31 @@ namespace ppp {
 
                 ppp::telemetry::Log(Level::kInfo, "exchanger", "constructed");
                 ppp::telemetry::Count("exchanger.create", 1);
+            }
+
+            udp::ServerUdpRelayHostPorts VirtualEthernetExchanger::BuildServerUdpRelayHostPorts() noexcept {
+                // The manager is a member owned by this exchanger, so its callbacks may capture the
+                // raw exchanger pointer: they never outlive the exchanger, and this is invoked from the
+                // constructor where shared_from_this() is not yet available.
+                VirtualEthernetExchanger* self = this;
+
+                udp::ServerUdpRelayHostPorts host;
+                host.create_port =
+                    [self](const udp::ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& source) noexcept {
+                        return self->NewDatagramPort(transmission, source);
+                    };
+                // Keep the switcher logger / debug telemetry on the exchanger side so the manager stays
+                // pure mechanism; fired once when a fresh port's socket opens (was inline in SendPacketToDestination).
+                host.on_port_opened =
+                    [self](const udp::ITransmissionPtr& transmission, const udp::VirtualEthernetDatagramPortPtr& port) noexcept {
+                        VirtualEthernetLoggerPtr logger = self->switcher_->GetLogger();
+                        if (NULLPTR != logger) {
+                            logger->Port(self->GetId(), transmission, port->GetSourceEndPoint(), port->GetLocalEndPoint());
+                        }
+
+                        ppp::telemetry::Log(Level::kDebug, "exchanger", "datagram port opened");
+                    };
+                return host;
             }
 
             /** @brief Releases exchanger resources. */
@@ -275,8 +302,7 @@ namespace ppp {
 
                 static_echo_source_ep_ = boost::asio::ip::udp::endpoint(boost::asio::ip::address_v4::any(), 0);
                 for (;;) {
-                    Dictionary::ReleaseAllObjects(datagrams_);
-                    datagrams_.clear();
+                    datagram_manager_->Release();
 
                     Dictionary::ReleaseAllObjects(mappings_);
                     mappings_.clear();
@@ -904,45 +930,7 @@ namespace ppp {
                     }
                 }
 
-                VirtualEthernetDatagramPortPtr datagram = GetDatagramPort(sourceEP);
-                if (NULLPTR != datagram) {
-                    if (fin) {
-                        datagram->MarkFinalize();
-                        datagram->Dispose();
-                        return true;
-                    }
-                    else {
-                        return datagram->SendTo(packet, packet_length, destinationEP);
-                    }
-                }
-                elif(fin) {
-                    return false;
-                }
-                else {
-                    datagram = NewDatagramPort(transmission, sourceEP);
-                    if (NULLPTR != datagram) {
-                        bool ok = false;
-                        if (auto r = datagrams_.emplace(sourceEP, datagram); r.second) {
-                            ok = datagram->Open();
-                            if (!ok) {
-                                datagrams_.erase(r.first);
-                            }
-                        }
-
-                        if (ok) {
-                            if (NULLPTR != logger) {
-                                logger->Port(GetId(), transmission, datagram->GetSourceEndPoint(), datagram->GetLocalEndPoint());
-                            }
-
-                            ppp::telemetry::Log(Level::kDebug, "exchanger", "datagram port opened");
-                            return datagram->SendTo(packet, packet_length, destinationEP);
-                        }
-                        else {
-                            datagram->Dispose();
-                        }
-                    }
-                    return false;
-                }
+                return datagram_manager_->SendToDestination(transmission, sourceEP, destinationEP, packet, packet_length, fin);
             }
 
             /**
@@ -1263,7 +1251,7 @@ socket->send_to(boost::asio::buffer(packet.get(), packet_length), redirectEP,
                         DoMuxEvents();
                         DoKeepAlived(GetTransmission(), now);
 
-                        Dictionary::UpdateAllObjects(datagrams_, now);
+                        datagram_manager_->Tick(now);
                         Dictionary::UpdateAllObjects2(mappings_, now);
                     });
                 return true;
@@ -1406,12 +1394,12 @@ socket->send_to(boost::asio::buffer(packet.get(), packet_length), redirectEP,
 
             /** @brief Finds a cached datagram port by source endpoint key. */
             VirtualEthernetExchanger::VirtualEthernetDatagramPortPtr VirtualEthernetExchanger::GetDatagramPort(const boost::asio::ip::udp::endpoint& sourceEP) noexcept {
-                return Dictionary::FindObjectByKey(datagrams_, sourceEP);
+                return datagram_manager_->GetDatagramPort(sourceEP);
             }
 
             /** @brief Removes and returns cached datagram port by source endpoint key. */
             VirtualEthernetExchanger::VirtualEthernetDatagramPortPtr VirtualEthernetExchanger::ReleaseDatagramPort(const boost::asio::ip::udp::endpoint& sourceEP) noexcept {
-                return Dictionary::ReleaseObjectByKey(datagrams_, sourceEP);
+                return datagram_manager_->ReleaseDatagramPort(sourceEP);
             }
 
             /** @brief Parses and forwards ICMP packet to echo subsystem after firewall checks. */
