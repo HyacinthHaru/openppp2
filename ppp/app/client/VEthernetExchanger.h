@@ -95,7 +95,6 @@ namespace ppp {
              * is undefined behavior.
              */
             class VEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer, public udp::IUdpRelayHost {
-                friend class                                                            VEthernetDatagramPort;
                 friend class                                                            VEthernetNetworkSwitcher;
                 friend class                                                            ExchangerStaticEchoChannel;
                 friend struct                                                           ExchangerStaticEchoDetail;

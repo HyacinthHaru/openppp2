@@ -22,7 +22,7 @@ boost::asio::ip::udp::endpoint Ep(const char* address, unsigned short port) noex
 udp_client::VEthernetDatagramPortPtr MakeStubPort(const udp_client::ITransmissionPtr& transmission,
                                                   const boost::asio::ip::udp::endpoint& source) noexcept {
     return std::make_shared<ppp::app::client::VEthernetDatagramPort>(
-        std::shared_ptr<ppp::app::client::VEthernetExchanger>(), transmission, source);
+        std::shared_ptr<ppp::app::client::VEthernetExchanger>(), udp_client::UdpRelayHostPorts(), transmission, source);
 }
 
 udp_client::UdpRelayHostPorts MakeFilledPorts() noexcept {
@@ -32,8 +32,10 @@ udp_client::UdpRelayHostPorts MakeFilledPorts() noexcept {
     ports.datagram_output = [](const boost::asio::ip::udp::endpoint&, const boost::asio::ip::udp::endpoint&,
                                void*, int, bool) noexcept { return true; };
     ports.rewrite_fakeip = [](const boost::asio::ip::address& address) noexcept { return address; };
-    ports.do_send_to = [](int, const boost::asio::ip::udp::endpoint&, const boost::asio::ip::udp::endpoint&,
-                          const ppp::Byte*, int) noexcept { return true; };
+    ports.do_send_to = [](const udp_client::ITransmissionPtr&, const boost::asio::ip::udp::endpoint&,
+                          const boost::asio::ip::udp::endpoint&, ppp::Byte*, int,
+                          ppp::coroutines::YieldContext&) noexcept { return true; };
+    ports.release_port = [](const boost::asio::ip::udp::endpoint&) noexcept {};
     ports.emplace_timeout = [](int64_t, ppp::function<void()>) noexcept {};
     ports.get_transmission = []() noexcept {
         // Non-null aliasing handle: SendTo only null-checks it before handing it to create_port,
