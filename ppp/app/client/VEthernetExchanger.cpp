@@ -149,12 +149,23 @@ namespace ppp {
                 host.get_configuration = [self]() noexcept { return self->switcher_->GetConfiguration(); };
                 host.rewrite_fakeip =
                     [self](const boost::asio::ip::address& address) noexcept { return self->switcher_->RewriteFakeIpAddress(address); };
-                // do_send_to / emplace_timeout back the port's coroutine send path, which stays on the port
-                // until P2-d; the manager never invokes them, so empty stand-ins keep the surface valid.
+                // do_send_to mirrors the link-layer SENDTO; the port supplies its own transmission and
+                // coroutine yield context. release_port lets a port deregister itself on finalize (P2-d).
                 host.do_send_to =
-                    [](int, const boost::asio::ip::udp::endpoint&, const boost::asio::ip::udp::endpoint&,
-                       const ppp::Byte*, int) noexcept { return false; };
+                    [self](const udp::ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& source,
+                           const boost::asio::ip::udp::endpoint& destination, ppp::Byte* packet, int packet_length,
+                           ppp::coroutines::YieldContext& y) noexcept {
+                        return self->DoSendTo(transmission, source, destination, packet, packet_length, y);
+                    };
+                host.release_port =
+                    [self](const boost::asio::ip::udp::endpoint& source) noexcept { self->ReleaseDatagramPort(source); };
                 host.emplace_timeout = [](int64_t, ppp::function<void()>) noexcept {};
+#if defined(_ANDROID)
+                host.is_bypass_ip =
+                    [self](const boost::asio::ip::address& address) noexcept { return self->switcher_->IsBypassIpAddress(address); };
+                host.get_protector_network =
+                    [self]() noexcept { return self->switcher_->GetProtectorNetwork(); };
+#endif
                 return host;
             }
 

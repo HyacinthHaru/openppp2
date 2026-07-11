@@ -32,8 +32,10 @@ udp_client::UdpRelayHostPorts MakeFilledPorts() noexcept {
     ports.datagram_output = [](const boost::asio::ip::udp::endpoint&, const boost::asio::ip::udp::endpoint&,
                                void*, int, bool) noexcept { return true; };
     ports.rewrite_fakeip = [](const boost::asio::ip::address& address) noexcept { return address; };
-    ports.do_send_to = [](int, const boost::asio::ip::udp::endpoint&, const boost::asio::ip::udp::endpoint&,
-                          const ppp::Byte*, int) noexcept { return true; };
+    ports.do_send_to = [](const udp_client::ITransmissionPtr&, const boost::asio::ip::udp::endpoint&,
+                          const boost::asio::ip::udp::endpoint&, ppp::Byte*, int,
+                          ppp::coroutines::YieldContext&) noexcept { return true; };
+    ports.release_port = [](const boost::asio::ip::udp::endpoint&) noexcept {};
     ports.emplace_timeout = [](int64_t, ppp::function<void()>) noexcept {};
     ports.get_transmission = []() noexcept {
         // Non-null aliasing handle: SendTo only null-checks it before handing it to create_port,

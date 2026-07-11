@@ -22,6 +22,14 @@ namespace ppp {
     namespace transmissions {
         class ITransmission;
     }
+    namespace coroutines {
+        class YieldContext;
+    }
+#if defined(_ANDROID)
+    namespace net {
+        class ProtectorNetwork;
+    }
+#endif
 }
 
 namespace ppp {
@@ -61,15 +69,15 @@ namespace ppp {
                     ppp::function<boost::asio::ip::address(const boost::asio::ip::address& address)> rewrite_fakeip;
 
                     /**
-                     * @brief Send a datagram to the server (link-layer SENDTO).
-                     * @note The coroutine/transmission plumbing stays inside VEthernetDatagramPort
-                     *       (P2-d); the manager only manages the session table, so this port models
-                     *       the value-typed slice of the link-layer send surface.
+                     * @brief Send a datagram to the server over the link-layer SENDTO path (P2-d).
+                     * @note Mirrors VirtualEthernetLinklayer::DoSendTo exactly; the port supplies its own
+                     *       transmission and coroutine yield context, so this models the port's send surface.
                      */
-                    ppp::function<bool(int in_protocol,
+                    ppp::function<bool(const ITransmissionPtr& transmission,
                                        const boost::asio::ip::udp::endpoint& source,
                                        const boost::asio::ip::udp::endpoint& destination,
-                                       const ppp::Byte* payload, int payload_size)> do_send_to;
+                                       ppp::Byte* packet, int packet_length,
+                                       ppp::coroutines::YieldContext& y)> do_send_to;
 
                     /** @brief Register a one-shot timeout callback (UDP session aging). */
                     ppp::function<void(int64_t timeout_ms, ppp::function<void()> on_timeout)> emplace_timeout;
@@ -84,9 +92,20 @@ namespace ppp {
                     /** @brief Whether the owning exchanger has been disposed. */
                     ppp::function<bool()> is_disposed;
 
+                    /** @brief Deregister a datagram port from the session table (port self-finalize). */
+                    ppp::function<void(const boost::asio::ip::udp::endpoint& source)> release_port;
+
+#if defined(_ANDROID)
+                    /** @brief Whether an address bypasses the VPN tunnel via a direct Android socket. */
+                    ppp::function<bool(const boost::asio::ip::address& address)> is_bypass_ip;
+
+                    /** @brief Android socket protector for datagram bypass sockets. */
+                    ppp::function<std::shared_ptr<ppp::net::ProtectorNetwork>()> get_protector_network;
+#endif
+
                     bool IsValid() const noexcept {
                         return get_tap && get_configuration && datagram_output && do_send_to &&
-                            emplace_timeout && get_transmission && create_port && is_disposed;
+                            emplace_timeout && get_transmission && create_port && is_disposed && release_port;
                     }
                 };
 
