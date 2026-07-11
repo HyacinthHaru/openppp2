@@ -493,6 +493,7 @@
     <ClCompile Include="ppp\net\asio\websocket.cpp" />
     <ClCompile Include="ppp\net\Firewall.cpp" />
     <ClCompile Include="ppp\net\native\checksum.cpp" />
+    <ClCompile Include="ppp\net\native\rib.cpp" />
     <ClCompile Include="ppp\net\packet\IcmpFrame.cpp" />
     <ClCompile Include="ppp\net\packet\IPFragment.cpp" />
     <ClCompile Include="ppp\net\packet\IPFrame.cpp" />
