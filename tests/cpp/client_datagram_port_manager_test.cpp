@@ -22,7 +22,7 @@ boost::asio::ip::udp::endpoint Ep(const char* address, unsigned short port) noex
 udp_client::VEthernetDatagramPortPtr MakeStubPort(const udp_client::ITransmissionPtr& transmission,
                                                   const boost::asio::ip::udp::endpoint& source) noexcept {
     return std::make_shared<ppp::app::client::VEthernetDatagramPort>(
-        std::shared_ptr<ppp::app::client::VEthernetExchanger>(), transmission, source);
+        std::shared_ptr<ppp::app::client::VEthernetExchanger>(), udp_client::UdpRelayHostPorts(), transmission, source);
 }
 
 udp_client::UdpRelayHostPorts MakeFilledPorts() noexcept {

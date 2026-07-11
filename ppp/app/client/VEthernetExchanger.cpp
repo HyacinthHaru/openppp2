@@ -1780,7 +1780,7 @@ namespace ppp {
                 std::shared_ptr<VEthernetExchanger> exchanger
                     = std::dynamic_pointer_cast<VEthernetExchanger>(my);
 
-                return make_shared_object<VEthernetDatagramPort>(exchanger, transmission, sourceEP);
+                return make_shared_object<VEthernetDatagramPort>(exchanger, BuildUdpRelayHostPorts(), transmission, sourceEP);
             }
 
             /** @brief Returns datagram relay port by source endpoint key. */

@@ -40,8 +40,9 @@ namespace ppp {
         namespace client {
 
             VEthernetDatagramPort::VEthernetDatagramPort(const VEthernetExchangerPtr& exchanger,
-                const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept
-                : exchanger_(exchanger)
+                udp::UdpRelayHostPorts ports, const ITransmissionPtr& transmission, const boost::asio::ip::udp::endpoint& sourceEP) noexcept
+                : ports_(std::move(ports))
+                , exchanger_(exchanger)
                 , transmission_(transmission)
                 , sourceEP_(sourceEP) {
                 disposed_ = false;
