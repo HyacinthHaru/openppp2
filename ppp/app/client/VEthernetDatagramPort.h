@@ -222,7 +222,7 @@ namespace ppp {
                 bool                                                    Loopback() noexcept;
 #endif
 
-            protected:
+            public: // P2-c: manager routes inbound datagrams without exchanger friendship
                 /**
                  * @brief Handles a datagram received from the remote server for this source endpoint.
                  *
@@ -261,7 +261,10 @@ namespace ppp {
                  * @brief Marks this port as finalized by an external caller (e.g. exchanger GC sweep).
                  * @note After this call the port will not re-enter the exchanger tables.
                  */
+            public: // P2-c: manager needs the finalize signal without exchanger friendship
                 void                                                    MarkFinalize() noexcept { finalize_ = true; }
+
+            private:
 
             private:
                 struct {

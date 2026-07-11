@@ -4,11 +4,10 @@
  * @file UdpRelayHost.h
  * @brief Narrow host surface for the UDP relay pipeline without VEthernetExchanger.h.
  *
- * Phase 2 (P2-b) scaffold: mirrors the proven route::RouteHostPorts / dns::DnsHostPorts
- * pattern. Lets a future ClientDatagramPortManager consume exchanger capabilities through
- * injected callbacks instead of a back-pointer + friend, so the UDP relay can be extracted
- * from the God-Object exchanger. This header only DEFINES the surface; wiring lands in later
- * increments (P2-c/P2-d). See docs/UDP_DECOUPLING_PHASE2_DESIGN.md.
+ * Phase 2 (P2-b/P2-c): mirrors the proven route::RouteHostPorts / dns::DnsHostPorts
+ * pattern. Lets ClientDatagramPortManager consume exchanger capabilities through injected
+ * callbacks instead of a back-pointer + friend, so the UDP relay can be extracted from the
+ * God-Object exchanger. See docs/UDP_DECOUPLING_PHASE2_DESIGN.md.
  */
 
 #include <ppp/stdafx.h>
@@ -20,6 +19,9 @@ namespace ppp {
     namespace tap {
         class ITap;
     }
+    namespace transmissions {
+        class ITransmission;
+    }
 }
 
 namespace ppp {
@@ -27,8 +29,20 @@ namespace ppp {
         namespace client {
 
             class VEthernetExchanger;
+            class VEthernetDatagramPort;
 
             namespace udp {
+
+                /** @brief Active server transmission handle (matches exchanger's ITransmissionPtr). */
+                using ITransmissionPtr = std::shared_ptr<ppp::transmissions::ITransmission>;
+
+                /** @brief Datagram relay port handle (matches exchanger's VEthernetDatagramPortPtr). */
+                using VEthernetDatagramPortPtr = std::shared_ptr<VEthernetDatagramPort>;
+
+                /** @brief Local proxy UDP reply handler (matches exchanger's DatagramPacketHandler). */
+                using DatagramPacketHandler = ppp::function<bool(const boost::asio::ip::udp::endpoint& source,
+                                                                 const boost::asio::ip::udp::endpoint& destination,
+                                                                 void* packet, int packet_size)>;
 
                 /** @brief Injectable exchanger capabilities for the UDP relay pipeline (no exchanger header). */
                 struct UdpRelayHostPorts final {
@@ -48,10 +62,9 @@ namespace ppp {
 
                     /**
                      * @brief Send a datagram to the server (link-layer SENDTO).
-                     * @note P2-c: the real VirtualEthernetLinklayer::DoSendTo also needs the active
-                     *       ITransmission + a coroutine YieldContext; the manager will supply those from
-                     *       its own session state rather than through this value-typed port. Kept here as
-                     *       the intended surface; wiring resolves the coroutine plumbing in P2-c.
+                     * @note The coroutine/transmission plumbing stays inside VEthernetDatagramPort
+                     *       (P2-d); the manager only manages the session table, so this port models
+                     *       the value-typed slice of the link-layer send surface.
                      */
                     ppp::function<bool(int in_protocol,
                                        const boost::asio::ip::udp::endpoint& source,
@@ -61,8 +74,19 @@ namespace ppp {
                     /** @brief Register a one-shot timeout callback (UDP session aging). */
                     ppp::function<void(int64_t timeout_ms, ppp::function<void()> on_timeout)> emplace_timeout;
 
+                    /** @brief Fetch the active server transmission for opening new datagram ports. */
+                    ppp::function<ITransmissionPtr()> get_transmission;
+
+                    /** @brief Build a datagram relay port bound to (transmission, source endpoint). */
+                    ppp::function<VEthernetDatagramPortPtr(const ITransmissionPtr& transmission,
+                                                           const boost::asio::ip::udp::endpoint& source)> create_port;
+
+                    /** @brief Whether the owning exchanger has been disposed. */
+                    ppp::function<bool()> is_disposed;
+
                     bool IsValid() const noexcept {
-                        return get_tap && get_configuration && datagram_output && do_send_to && emplace_timeout;
+                        return get_tap && get_configuration && datagram_output && do_send_to &&
+                            emplace_timeout && get_transmission && create_port && is_disposed;
                     }
                 };
 
