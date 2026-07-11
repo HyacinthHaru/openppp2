@@ -227,6 +227,24 @@ namespace ppp {
                     }
                 }
 
+                void ClientDatagramPortManager::Release() noexcept {
+                    ppp::vector<VEthernetDatagramPortPtr> stale;
+                    {
+                        std::lock_guard<std::mutex> scope(syncobj_);
+                        for (auto&& kv : datagrams_) {
+                            if (NULLPTR != kv.second) {
+                                stale.emplace_back(kv.second);
+                            }
+                        }
+                        datagrams_.clear();
+                        datagram_handlers_.clear();
+                    }
+
+                    for (auto&& datagram : stale) {
+                        datagram->Dispose();
+                    }
+                }
+
             }
         }
     }

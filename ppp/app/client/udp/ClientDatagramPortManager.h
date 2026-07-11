@@ -67,6 +67,9 @@ namespace ppp {
                      *         lock, dispose outside it) with an identity check to survive races. */
                     void Tick(UInt64 now) noexcept;
 
+                    /** @brief Dispose every port and clear both tables (exchanger teardown). */
+                    void Release() noexcept;
+
                 private:
                     UdpRelayHostPorts                                                    ports_;
                     /** @brief Independent lock guarding datagrams_ and datagram_handlers_. */

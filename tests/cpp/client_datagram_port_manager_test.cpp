@@ -187,6 +187,19 @@ BOOST_AUTO_TEST_CASE(tick_on_empty_table_is_noop) {
     BOOST_TEST(spy_ns::DatagramPortSpyInstance().dispose == 0);
 }
 
+BOOST_AUTO_TEST_CASE(release_disposes_all_and_clears_tables) {
+    spy_ns::DatagramPortSpyInstance().Reset();
+    udp_client::ClientDatagramPortManager m(MakeFilledPorts());
+    m.AddNewDatagramPort(udp_client::ITransmissionPtr(), Ep("10.0.0.9", 1300));
+    m.AddNewDatagramPort(udp_client::ITransmissionPtr(), Ep("10.0.0.10", 1400));
+
+    m.Release();
+
+    BOOST_TEST((m.GetDatagramPort(Ep("10.0.0.9", 1300)) == nullptr));
+    BOOST_TEST((m.GetDatagramPort(Ep("10.0.0.10", 1400)) == nullptr));
+    BOOST_TEST(spy_ns::DatagramPortSpyInstance().dispose == 2);
+}
+
 BOOST_AUTO_TEST_CASE(concurrent_send_receive_tick_no_uaf) {
     udp_client::ClientDatagramPortManager m(MakeFilledPorts());
     std::atomic<int> sent{0};
