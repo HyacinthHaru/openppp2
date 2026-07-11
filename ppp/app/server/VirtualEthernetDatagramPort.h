@@ -131,6 +131,16 @@ namespace ppp {
                  */
                 bool                                                    IsPortAging(UInt64 now) noexcept { return disposed_ || now >= timeout_; }
 
+                /**
+                 * @brief Marks this port as externally finalized before the owner releases it.
+                 *
+                 * @details Set by the owner (exchanger GC sweep / session manager) before it drops
+                 *          the shared_ptr.  Prevents a race between external release and a
+                 *          self-triggered `Dispose()`.  Public since P2-e so the session manager can
+                 *          signal it without friendship.
+                 */
+                void                                                    MarkFinalize() noexcept { finalize_ = true; }
+
             public:
                 /**
                  * @brief Parses a DNS response packet and inserts it into the switcher's namespace cache.
@@ -197,15 +207,6 @@ namespace ppp {
                  *          current tick count.
                  */
                 void                                                    Update() noexcept;
-
-                /**
-                 * @brief Marks this port as externally finalized by the GC sweep.
-                 *
-                 * @details Called by the owner exchanger's GC sweep before it releases
-                 *          the shared_ptr.  Prevents a race between external GC and
-                 *          self-triggered `Dispose()`.
-                 */
-                void                                                    MarkFinalize() noexcept { finalize_ = true; }
 
             private:
                 /**
