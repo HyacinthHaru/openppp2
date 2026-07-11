@@ -80,9 +80,7 @@ namespace ppp {
              *       classes can access internal state without exposing it via public API.
              */
             class VirtualEthernetExchanger : public ppp::app::protocol::VirtualEthernetLinklayer, public udp::IServerUdpRelayHost {
-                friend class                                                                VirtualInternetControlMessageProtocolStatic;
                 friend class                                                                VirtualEthernetSwitcher;
-                friend class                                                                VirtualEthernetDatagramPortStatic;
 
             public:
                 /** @brief Base information packet type alias. */
@@ -181,6 +179,14 @@ namespace ppp {
                 VirtualEthernetManagedServerPtr                                             GetManagedServer() noexcept { return managed_server_; }
                 /** @brief Returns the traffic statistics object for this session. */
                 ITransmissionStatisticsPtr                                                  GetStatistics() noexcept    { return statistics_; }
+                /** @brief Static-echo allocation context shared with the static datagram/ICMP ports (P2-f). */
+                VirtualEthernetStaticEchoAllocatedContextPtr                                GetStaticAllocatedContext() noexcept { return static_allocated_context_; }
+                /** @brief Static-echo session slot index (P2-f). */
+                int                                                                         GetStaticEchoSessionId() noexcept { return static_echo_session_id_.load(); }
+                /** @brief Most-recent static-echo sender endpoint (P2-f). */
+                boost::asio::ip::udp::endpoint                                              GetStaticEchoSourceEndPoint() noexcept { return static_echo_source_ep_; }
+                /** @brief Releases a static-echo UDP source-port mapping when a port is freed (public since P2-f). */
+                bool                                                                        StaticEchoReleasePort(uint32_t source_ip, int source_port) noexcept;
                 /** @brief Returns the link telemetry object for this session. */
                 ppp::diagnostics::LinkTelemetry&                                             GetLinkTelemetry() noexcept { return link_telemetry_; }
                 /** @brief Returns the VMUX instance when sub-channel multiplexing is active. */
@@ -528,14 +534,6 @@ namespace ppp {
                  */
                 bool                                                                        StaticEcho(const ITransmissionPtr& transmission, YieldContext& y) noexcept;
 
-                /**
-                 * @brief Releases a static-echo UDP source-port mapping when a port is freed.
-                 *
-                 * @param source_ip   Source IPv4 address (host-byte order).
-                 * @param source_port Source UDP port number.
-                 * @return True if the mapping is found and released.
-                 */
-                bool                                                                        StaticEchoReleasePort(uint32_t source_ip, int source_port) noexcept;
 
                 /**
                  * @brief Forwards a static-echo UDP packet to its network destination.
